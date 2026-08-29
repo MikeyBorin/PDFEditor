@@ -826,6 +826,9 @@ public partial class MainViewModel : ObservableObject
                     ReplaceRegionWithText(pageIndex, nx, ny, nw, nh, region);
                     break;
             }
+            // One-shot: revert to Select after Copy or Cancel. Replace already does this
+            // inside ReplaceRegionWithText — the assignment here is idempotent.
+            CurrentTool = ToolMode.Select;
             return;
         }
 
@@ -857,6 +860,8 @@ public partial class MainViewModel : ObservableObject
                     }
                     break;
             }
+            // One-shot: revert to Select after Copy, Save, or Cancel.
+            CurrentTool = ToolMode.Select;
         }
     }
 
