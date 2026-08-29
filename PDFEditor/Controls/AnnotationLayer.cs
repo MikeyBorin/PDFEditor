@@ -439,6 +439,14 @@ public class AnnotationLayer : Canvas
         if (e.ClickCount >= 2)
         {
             if (TryEditUnderCursor(e.GetPosition(this))) { e.Handled = true; return; }
+            // Nothing under the cursor: with the Select tool, treat this as a
+            // shortcut to drop a text stamp here — engage TextStamp and fall
+            // through to the tool-handling branches below, which will open the
+            // dialog and auto-revert to Select afterward.
+            if (MainVM.CurrentTool == ToolMode.Select)
+            {
+                MainVM.CurrentTool = ToolMode.TextStamp;
+            }
         }
 
         var tool = MainVM.CurrentTool;
