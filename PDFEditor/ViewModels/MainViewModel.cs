@@ -865,19 +865,19 @@ public partial class MainViewModel : ObservableObject
         var page = Pages.ElementAtOrDefault(pageIndex);
         if (page is null) return;
 
-        // Prefer PdfPig's actual glyph point size + font name over a bounding-box guess.
-        var fontSize = region.FontPointSize > 0 ? region.FontPointSize : System.Math.Max(6, region.AverageFontHeightPoints * 0.85);
-        if (double.IsNaN(fontSize) || double.IsInfinity(fontSize) || fontSize <= 0) fontSize = 12;
-
-        // Pre-fill dialog with source text, family, style so the user can edit before committing.
+        // Pre-fill dialog with the source TEXT, but use last-used font settings — the user
+        // has usually established a preferred font for this session and wants it applied
+        // consistently. Source-detected family/size was noisy anyway.
         var hex = "#" + CurrentColor.R.ToString("X2") + CurrentColor.G.ToString("X2") + CurrentColor.B.ToString("X2");
         var r = Controls.TextStampDialog.Show(
             defaultText: region.Text,
-            defaultFont: string.IsNullOrEmpty(region.FontFamily) ? "Arial" : region.FontFamily,
-            defaultSize: fontSize,
-            defaultBold: region.Bold,
-            defaultItalic: region.Italic,
-            defaultColorHex: hex);
+            defaultFont: CurrentFontFamily,
+            defaultSize: CurrentFontSize,
+            defaultBold: CurrentBold,
+            defaultItalic: CurrentItalic,
+            defaultUnderline: CurrentUnderline,
+            defaultColorHex: hex,
+            defaultAlign: CurrentAlign);
         if (r is null) return;
         try
         {
