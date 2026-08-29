@@ -1,0 +1,10 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+crash.log
+startup.log
+sample-annotated.pdf
+sample-exported.docx
+test-out/
