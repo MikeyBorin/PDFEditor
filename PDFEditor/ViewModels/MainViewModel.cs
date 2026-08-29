@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ExportService _export;
     private readonly BookmarkService _bookmarks = new();
     private readonly SignatureLibraryService _signatures = new();
+    private readonly FileAssociationService _fileAssoc = new();
     public ToolbarSettingsService ToolbarSettings { get; } = new();
     public ThemeService Theme { get; } = new();
 
@@ -90,6 +91,48 @@ public partial class MainViewModel : ObservableObject
     private bool HasDocumentAndPages() => Pages.Count > 0;
 
     partial void OnActiveProfileNameChanged(string value) => ToolbarSettings.SetActive(value);
+
+    [RelayCommand]
+    private void RegisterFileAssociation()
+    {
+        try
+        {
+            _fileAssoc.Register();
+            var msg = "PDF Editor is now registered as a PDF handler for your user account.\n\n" +
+                      "To make it the default:\n" +
+                      "  1. Right-click any .pdf → Open with → Choose another app\n" +
+                      "     Pick PDF Editor and tick \"Always use this app\", OR\n" +
+                      "  2. Settings → Apps → Default apps → search '.pdf' → pick PDF Editor.\n\n" +
+                      "(Windows blocks apps from taking the default automatically — this is an " +
+                      "anti-hijacking measure, not something we can override.)\n\n" +
+                      "Registered exe: " + (Environment.ProcessPath ?? "(unknown)");
+            MessageBox.Show(msg, "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            StatusText = "Registered as PDF handler.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Register failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void UnregisterFileAssociation()
+    {
+        try
+        {
+            _fileAssoc.Unregister();
+            MessageBox.Show(
+                "PDF Editor removed from the Windows file-association list.\n\n" +
+                "If it was your default handler, Windows will fall back to the previous app " +
+                "(or ask you to pick one) next time you open a .pdf.",
+                "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            StatusText = "Unregistered as PDF handler.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unregister failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     [RelayCommand]
     private void CustomiseToolbar()
@@ -1488,11 +1531,31 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null) return;
 
-        // Only ask if the document actually contains sticky notes (/Text annotations).
-        // Hyperlinks, form fields, and other /Annots subtypes must NOT trigger the prompt —
-        // the previous check counted the whole /Annots array which fires on almost any PDF.
+        // Flatten unsaved overlays into a working byte stream so anything you've
+        // annotated this session — sticky notes, highlights, drawings, everything —
+        // appears in the print. Without this, printing before Save silently drops
+        // every overlay.
+        var overlays = Pages.SelectMany(p => p.Annotations).ToList();
+        byte[] workingBytes;
+        try
+        {
+            workingBytes = overlays.Count > 0
+                ? await Task.Run(() => _annotate.Flatten(_doc.Bytes!, overlays))
+                : _doc.Bytes;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Could not prepare document for printing: " + ex.Message,
+                "Print failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        // Only ask if the working document actually contains sticky notes (/Text
+        // annotations). Hyperlinks, form fields, and other /Annots subtypes must
+        // NOT trigger the prompt — the previous check counted the whole /Annots
+        // array which fires on almost any PDF.
         var includeMarkup = true;
-        if (_annotate.HasStickyNotes(_doc.Bytes))
+        if (_annotate.HasStickyNotes(workingBytes))
         {
             var choice = MessageBox.Show(
                 "This document contains sticky notes.\n\nInclude them in the print?",
@@ -1517,8 +1580,9 @@ public partial class MainViewModel : ObservableObject
             last = System.Math.Min(_doc.PageCount, dlg.PageRange.PageTo);
         }
 
-        // Prepare a byte-stream that either keeps or removes annotations.
-        var printBytes = includeMarkup ? _doc.Bytes : _annotate.StripAnnotations(_doc.Bytes);
+        // workingBytes already has session overlays flattened in. Optionally strip
+        // sticky notes (/Text) if the user chose "No" to markup.
+        var printBytes = includeMarkup ? workingBytes : _annotate.StripAnnotations(workingBytes);
 
         try
         {
@@ -1526,38 +1590,42 @@ public partial class MainViewModel : ObservableObject
             StatusText = includeMarkup
                 ? $"Rendering pages {first}-{last} for printing (with notes)..."
                 : $"Rendering pages {first}-{last} for printing (notes hidden)...";
-            var fixedDoc = await Task.Run(() =>
+
+            // FixedDocument is a DispatcherObject and must be created + accessed on the
+            // UI thread only. Build it here; do the expensive page rasterisation on a
+            // background thread and marshal each page back to the UI thread to be added.
+            var fixedDoc = new System.Windows.Documents.FixedDocument();
+            fixedDoc.DocumentPaginator.PageSize = new System.Windows.Size(dlg.PrintableAreaWidth, dlg.PrintableAreaHeight);
+
+            var printableW = dlg.PrintableAreaWidth;
+            var printableH = dlg.PrintableAreaHeight;
+            await Task.Run(() =>
             {
-                var fd = new System.Windows.Documents.FixedDocument();
-                fd.DocumentPaginator.PageSize = new System.Windows.Size(dlg.PrintableAreaWidth, dlg.PrintableAreaHeight);
                 for (int i = first - 1; i <= last - 1; i++)
                 {
                     var bmp = _render.RenderPage(printBytes, i, dpi: 200);
-                    // Marshal Image UIElement creation to UI thread.
-                    var pageContent = Application.Current.Dispatcher.Invoke(() =>
+                    Application.Current.Dispatcher.Invoke(() =>
                     {
                         var page = new System.Windows.Documents.FixedPage
                         {
-                            Width = dlg.PrintableAreaWidth,
-                            Height = dlg.PrintableAreaHeight
+                            Width = printableW,
+                            Height = printableH
                         };
                         var img = new System.Windows.Controls.Image
                         {
                             Source = bmp,
                             Stretch = System.Windows.Media.Stretch.Uniform,
-                            Width = dlg.PrintableAreaWidth,
-                            Height = dlg.PrintableAreaHeight
+                            Width = printableW,
+                            Height = printableH
                         };
                         System.Windows.Documents.FixedPage.SetLeft(img, 0);
                         System.Windows.Documents.FixedPage.SetTop(img, 0);
                         page.Children.Add(img);
                         var pc = new System.Windows.Documents.PageContent();
                         ((System.Windows.Markup.IAddChild)pc).AddChild(page);
-                        return pc;
+                        fixedDoc.Pages.Add(pc);
                     });
-                    Application.Current.Dispatcher.Invoke(() => fd.Pages.Add(pageContent));
                 }
-                return fd;
             });
 
             dlg.PrintDocument(fixedDoc.DocumentPaginator, Path.GetFileName(_doc.FilePath ?? "document"));

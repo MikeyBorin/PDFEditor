@@ -225,6 +225,7 @@
       <li class="group">UI</li>
       <li><a href="#theme">Themes</a></li>
       <li><a href="#toolbar">Customise toolbar</a></li>
+      <li><a href="#fileassoc">Register as PDF handler</a></li>
       <li><a href="#recents">Recent files</a></li>
       <li><a href="#undo">Undo</a></li>
       <li><a href="#saving">Save behaviour</a></li>
@@ -513,6 +514,22 @@
       <li>Switch profiles from the toolbar dropdown or the Customise dialog.</li>
     </ul>
     <p>Profiles live in <code>%AppData%\PDFEditor\toolbar.json</code>.</p>
+
+    <h2 id="fileassoc">Register as PDF handler</h2>
+    <p><strong>File → Register as PDF Handler…</strong> writes per-user (HKCU) registry
+      entries that make PDF Editor appear in the Windows <em>Open with</em> list and the
+      <em>Settings → Default apps</em> picker. No admin elevation required.</p>
+    <p>Windows blocks apps from silently claiming the default association, so after
+      registering you still need to <em>choose</em> PDF Editor as your default once:</p>
+    <ul>
+      <li>Right-click any <code>.pdf</code> → <em>Open with</em> → <em>Choose another app</em>
+        → pick PDF Editor and tick <em>Always use this app</em>, OR</li>
+      <li><em>Settings → Apps → Default apps</em> → search <code>.pdf</code> → pick
+        PDF Editor.</li>
+    </ul>
+    <p><strong>File → Unregister as PDF Handler</strong> removes the entries. If you move
+      the exe to a different location, unregister first, then register again from the new
+      location so the recorded path is correct.</p>
 
     <h2 id="recents">Recent files</h2>
     <p><strong>File → Open Recent</strong> lists the last 10 documents. Selecting a missing file

@@ -63,6 +63,9 @@
                 <Separator/>
                 <MenuItem Header="_Print" Command="{Binding PrintCommand}" InputGestureText="Ctrl+P"/>
                 <Separator/>
+                <MenuItem Header="Register as PDF _Handler..." Command="{Binding RegisterFileAssociationCommand}" ToolTip="Add PDF Editor to Windows &quot;Open with&quot; and Default apps."/>
+                <MenuItem Header="_Unregister as PDF Handler" Command="{Binding UnregisterFileAssociationCommand}" ToolTip="Remove PDF Editor's file-association entries."/>
+                <Separator/>
                 <MenuItem Header="_Close" Command="{Binding CloseCommand}"/>
                 <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
