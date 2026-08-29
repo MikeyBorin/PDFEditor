@@ -134,19 +134,65 @@ public class AnnotationService
         return output.ToArray();
     }
 
-    /// <summary>Returns a copy of the PDF with all interactive annotations (Text notes etc.)
-    /// removed. Flattened content-stream drawings are unaffected.</summary>
+    /// <summary>Returns a copy of the PDF with sticky notes (/Text) and their popups (/Popup)
+    /// removed. Hyperlinks (/Link), form fields (/Widget), and other annotation kinds are
+    /// preserved so the print keeps its interactive elements intact.</summary>
     public byte[] StripAnnotations(byte[] pdfBytes)
     {
         using var input = new MemoryStream(pdfBytes);
         var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(input, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Modify);
         foreach (var page in doc.Pages)
         {
-            try { if (page.Elements.ContainsKey("/Annots")) page.Elements.Remove("/Annots"); } catch { }
+            try
+            {
+                if (!page.Elements.ContainsKey("/Annots")) continue;
+                var annots = page.Elements.GetArray("/Annots");
+                if (annots == null) continue;
+                for (int i = annots.Elements.Count - 1; i >= 0; i--)
+                {
+                    var dict = ResolveDict(annots.Elements[i]);
+                    if (dict == null) continue;
+                    var subtype = dict.Elements.GetName("/Subtype");
+                    if (subtype == "/Text" || subtype == "/Popup") annots.Elements.RemoveAt(i);
+                }
+                if (annots.Elements.Count == 0) page.Elements.Remove("/Annots");
+            }
+            catch { }
         }
         using var output = new MemoryStream();
         doc.Save(output, false);
         return output.ToArray();
+    }
+
+    /// <summary>Returns true if any page has a sticky-note (/Text subtype) annotation —
+    /// the only unflattened annotation kind PDF Editor writes.</summary>
+    public bool HasStickyNotes(byte[] pdfBytes)
+    {
+        try
+        {
+            using var ms = new MemoryStream(pdfBytes);
+            var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.InformationOnly);
+            foreach (var page in doc.Pages)
+            {
+                if (!page.Elements.ContainsKey("/Annots")) continue;
+                var annots = page.Elements.GetArray("/Annots");
+                if (annots == null) continue;
+                foreach (var el in annots.Elements)
+                {
+                    var dict = ResolveDict(el);
+                    if (dict?.Elements.GetName("/Subtype") == "/Text") return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private static PdfSharpCore.Pdf.PdfDictionary? ResolveDict(PdfSharpCore.Pdf.PdfItem item)
+    {
+        if (item is PdfSharpCore.Pdf.PdfDictionary d) return d;
+        if (item is PdfSharpCore.Pdf.Advanced.PdfReference r) return r.Value as PdfSharpCore.Pdf.PdfDictionary;
+        return null;
     }
 
     private static void DrawAlignedLine(XGraphics gfx, string line, XFont font, XBrush brush, XColor color,

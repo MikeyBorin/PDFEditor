@@ -1488,27 +1488,18 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null) return;
 
-        // Extra pre-dialog: ask about markup if the doc has any note-type annotations.
+        // Only ask if the document actually contains sticky notes (/Text annotations).
+        // Hyperlinks, form fields, and other /Annots subtypes must NOT trigger the prompt —
+        // the previous check counted the whole /Annots array which fires on almost any PDF.
         var includeMarkup = true;
-        try
+        if (_annotate.HasStickyNotes(_doc.Bytes))
         {
-            using var ms = new MemoryStream(_doc.Bytes);
-            var probe = PdfSharpCore.Pdf.IO.PdfReader.Open(ms, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.InformationOnly);
-            bool anyAnnots = false;
-            foreach (var p in probe.Pages)
-            {
-                if (p.Elements.ContainsKey("/Annots")) { anyAnnots = true; break; }
-            }
-            if (anyAnnots)
-            {
-                var choice = MessageBox.Show(
-                    "This document contains sticky notes / annotations.\n\nInclude them in the print?",
-                    "Print options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-                if (choice == MessageBoxResult.Cancel) return;
-                includeMarkup = choice == MessageBoxResult.Yes;
-            }
+            var choice = MessageBox.Show(
+                "This document contains sticky notes.\n\nInclude them in the print?",
+                "Print options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (choice == MessageBoxResult.Cancel) return;
+            includeMarkup = choice == MessageBoxResult.Yes;
         }
-        catch { /* proceed with default */ }
 
         var dlg = new System.Windows.Controls.PrintDialog
         {
