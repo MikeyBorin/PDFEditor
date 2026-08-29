@@ -128,6 +128,32 @@ public partial class MainWindow : Window
             VM.SelectedAnnotation = null;
             e.Handled = true;
         }
+        if (e.Key == Key.F1)
+        {
+            OpenHelp();
+            e.Handled = true;
+        }
+    }
+
+    private void Help_Click(object sender, RoutedEventArgs e) => OpenHelp();
+
+    private void OpenHelp()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Help", "help.html");
+            if (!System.IO.File.Exists(path))
+            {
+                MessageBox.Show($"Help file not found:\n{path}", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var psi = new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true };
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (System.Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Help", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void SearchBox_KeyDown(object sender, KeyEventArgs e)

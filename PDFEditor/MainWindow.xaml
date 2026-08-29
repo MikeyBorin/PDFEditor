@@ -116,6 +116,8 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
+                <MenuItem Header="_View Help" InputGestureText="F1" Click="Help_Click"/>
+                <Separator/>
                 <MenuItem Header="About" Click="About_Click"/>
             </MenuItem>
         </Menu>
