@@ -44,6 +44,17 @@ public class ExtractService
         var pw = page.Width;
         var ph = page.Height;
 
+        // Some PDFs use /UserUnit to define coordinate scaling — PdfPig returns coords in user units,
+        // so a page with UserUnit=2 reports everything at half its visual size. Detect and apply.
+        double userUnit = 1.0;
+        try
+        {
+            if (page.Dictionary.TryGet(UglyToad.PdfPig.Tokens.NameToken.UserUnit,
+                out UglyToad.PdfPig.Tokens.NumericToken u))
+                userUnit = u.Data;
+        }
+        catch { }
+
         // Convert normalized top-left region → PdfPig bottom-left region.
         double left = nx * pw;
         double right = (nx + nw) * pw;
@@ -118,6 +129,12 @@ public class ExtractService
             // Candidate 3: derived from word bounding-box height ~= 1.15 × point size.
             double derivedFromBBox = avgH > 0 ? avgH / 1.15 : 0;
 
+            // Apply UserUnit scaling. If the page has /UserUnit 2, everything PdfPig reported
+            // is at half the visual size.
+            reportedMedian *= userUnit;
+            derivedFromGlyph *= userUnit;
+            derivedFromBBox *= userUnit;
+
             // Bias toward the largest sane candidate. PdfPig sometimes reports scaled 1pt fonts,
             // and being visually too small on-page is a worse outcome than being slightly too big.
             var candidates = new[] { reportedMedian, derivedFromGlyph, derivedFromBBox }
@@ -134,18 +151,18 @@ public class ExtractService
         }
 
         // For diagnostics — expose the three candidate calculations so the caller can display them.
-        var debug = $"reported={reportedFor(letters)}pt, glyph={glyphCandFor(letters):0.0}pt, bbox={(avgH > 0 ? avgH / 1.15 : 0):0.0}pt, avgH={avgH:0.0}pt, picked={pointSize:0.0}pt, letters={letters.Count}";
+        var debug = $"userUnit={userUnit:0.##}, reported={reportedFor(letters, userUnit)}pt, glyph={glyphCandFor(letters, userUnit):0.0}pt, bbox={(avgH > 0 ? avgH * userUnit / 1.15 : 0):0.0}pt, avgH={avgH * userUnit:0.0}pt, picked={pointSize:0.0}pt, letters={letters.Count}";
         return new RegionText(sb.ToString().TrimEnd(), avgH, pointSize, fontFamily, bold, italic, debug);
 
-        static string reportedFor(System.Collections.Generic.List<UglyToad.PdfPig.Content.Letter> ls)
+        static string reportedFor(System.Collections.Generic.List<UglyToad.PdfPig.Content.Letter> ls, double scale)
         {
             var r = ls.Select(l => l.PointSize).Where(s => s > 0 && s < 400).OrderBy(s => s).ToList();
-            return r.Count > 0 ? r[r.Count / 2].ToString("0.0") : "?";
+            return r.Count > 0 ? (r[r.Count / 2] * scale).ToString("0.0") : "?";
         }
-        static double glyphCandFor(System.Collections.Generic.List<UglyToad.PdfPig.Content.Letter> ls)
+        static double glyphCandFor(System.Collections.Generic.List<UglyToad.PdfPig.Content.Letter> ls, double scale)
         {
             var h = ls.Select(l => l.GlyphRectangle.Height).Where(x => x > 0.5 && x < 400).OrderByDescending(x => x).Take(System.Math.Max(3, ls.Count / 4)).ToList();
-            return h.Count > 0 ? h.Average() / 0.72 : 0;
+            return h.Count > 0 ? (h.Average() / 0.72) * scale : 0;
         }
     }
 
