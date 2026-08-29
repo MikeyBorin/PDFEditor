@@ -105,6 +105,7 @@ public class AnnotationLayer : Canvas
                         a.Underline = r.Underline;
                         a.Align = r.Align;
                         a.Color = c;
+                        MainVM.RememberFontChoice(r);
                         // Do NOT touch X/Y or Width (preserves resize) — keep layout exactly.
                         Page.RaiseAnnotationChanged();
                         MainVM.StatusText = "Text updated.";
@@ -476,12 +477,17 @@ public class AnnotationLayer : Canvas
             var text = PromptDialog.Ask("Sticky Note", "Note text:");
             if (!string.IsNullOrWhiteSpace(text))
             {
-                Page.Annotations.Add(new PdfAnnotation
+                var note = new PdfAnnotation
                 {
                     PageIndex = Page.PageIndex, Kind = AnnotationKind.StickyNote,
                     X = nx, Y = ny, Width = 0.02, Height = 0.02,
                     Color = MainVM.CurrentColor, Text = text
-                });
+                };
+                Page.Annotations.Add(note);
+                // One-shot tool: revert to Select so the next click drags/edits the note
+                // instead of dropping another one.
+                MainVM.SelectedAnnotation = note;
+                MainVM.CurrentTool = ToolMode.Select;
             }
             return;
         }
@@ -489,7 +495,14 @@ public class AnnotationLayer : Canvas
         if (tool == ToolMode.TextStamp)
         {
             var hex = "#" + MainVM.CurrentColor.R.ToString("X2") + MainVM.CurrentColor.G.ToString("X2") + MainVM.CurrentColor.B.ToString("X2");
-            var r = TextStampDialog.Show(defaultColorHex: hex);
+            var r = TextStampDialog.Show(
+                defaultFont: MainVM.CurrentFontFamily,
+                defaultSize: MainVM.CurrentFontSize,
+                defaultBold: MainVM.CurrentBold,
+                defaultItalic: MainVM.CurrentItalic,
+                defaultUnderline: MainVM.CurrentUnderline,
+                defaultColorHex: hex,
+                defaultAlign: MainVM.CurrentAlign);
             if (r != null && !string.IsNullOrWhiteSpace(r.Text))
             {
                 try
@@ -498,7 +511,7 @@ public class AnnotationLayer : Canvas
                     // Wrap width: aim for the remaining page width to the right of the click,
                     // capped at 60% of page. User can drag the resize handles to change it.
                     var wrapW = System.Math.Min(0.6, System.Math.Max(0.1, 0.9 - nx));
-                    Page.Annotations.Add(new PdfAnnotation
+                    var stamp = new PdfAnnotation
                     {
                         PageIndex = Page.PageIndex, Kind = AnnotationKind.TextStamp,
                         X = nx, Y = ny, Width = wrapW, Height = 0.05,
@@ -506,7 +519,13 @@ public class AnnotationLayer : Canvas
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align
-                    });
+                    };
+                    Page.Annotations.Add(stamp);
+                    MainVM.RememberFontChoice(r);
+                    // One-shot tool: revert to Select so the next click drags/edits the stamp
+                    // instead of dropping another one.
+                    MainVM.SelectedAnnotation = stamp;
+                    MainVM.CurrentTool = ToolMode.Select;
                 }
                 catch { }
             }

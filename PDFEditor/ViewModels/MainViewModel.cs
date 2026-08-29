@@ -123,6 +123,26 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private ToolMode currentTool = ToolMode.Select;
     [ObservableProperty] private Color currentColor = Colors.Black;
     [ObservableProperty] private double currentThickness = 3.0;
+    // Last-used text-stamp font state, persisted across text-edit actions so the dialog
+    // reopens with your previous choice instead of resetting to Arial 14.
+    [ObservableProperty] private string currentFontFamily = "Arial";
+    [ObservableProperty] private double currentFontSize = 14;
+    [ObservableProperty] private bool currentBold;
+    [ObservableProperty] private bool currentItalic;
+    [ObservableProperty] private bool currentUnderline;
+    [ObservableProperty] private TextAlign currentAlign = TextAlign.Left;
+
+    /// <summary>Snapshot the font settings the user just committed so the next text-edit action reuses them.</summary>
+    public void RememberFontChoice(Controls.TextStampDialog.Result r)
+    {
+        if (r is null) return;
+        if (!string.IsNullOrWhiteSpace(r.FontFamily)) CurrentFontFamily = r.FontFamily;
+        if (r.FontSize > 0 && !double.IsNaN(r.FontSize) && !double.IsInfinity(r.FontSize)) CurrentFontSize = r.FontSize;
+        CurrentBold = r.Bold;
+        CurrentItalic = r.Italic;
+        CurrentUnderline = r.Underline;
+        CurrentAlign = r.Align;
+    }
     [ObservableProperty] private string searchQuery = "";
     [ObservableProperty] private string extractedText = "";
     [ObservableProperty] private bool hasDocument;
@@ -887,6 +907,7 @@ public partial class MainViewModel : ObservableObject
             page.Annotations.Add(stamp);
             SelectedAnnotation = stamp;
             CurrentTool = ToolMode.Select;
+            RememberFontChoice(r);
             // Register undo: remove both annotations we just added.
             PushAnnotationUndo(() =>
             {
@@ -1006,6 +1027,7 @@ public partial class MainViewModel : ObservableObject
                     a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
                     a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
                     a.Align = r.Align; a.Color = c;
+                    RememberFontChoice(r);
                     CurrentPage?.RaiseAnnotationChanged();
                     StatusText = "Text updated.";
                 }
