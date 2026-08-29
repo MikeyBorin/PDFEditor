@@ -8,3 +8,4 @@ startup.log
 sample-annotated.pdf
 sample-exported.docx
 test-out/
+dist/

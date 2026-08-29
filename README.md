@@ -18,6 +18,18 @@ bin\Debug\net9.0-windows\PDFEditor.exe [optional-pdf-path]
 
 Drag a PDF onto the window, or use **File → Open** / **File → Open Recent**.
 
+## Building a release
+
+```
+.\publish.ps1                    # → dist\PDFEditor-<git-describe>-win-x64.zip
+.\publish.ps1 -Version 1.0.0     # → dist\PDFEditor-1.0.0-win-x64.zip
+```
+
+Produces a portable, self-contained ZIP (~80 MB) with `PDFEditor.exe`,
+`LICENSE`, `README.md`, and the `Help\` folder. No .NET install needed on the
+target machine. Pass `-TessdataPath <folder>` to bundle Tesseract training
+data for OCR support.
+
 ## What it does
 
 ### Viewing
