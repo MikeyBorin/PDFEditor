@@ -187,6 +187,18 @@ public partial class MainViewModel : ObservableObject
         CurrentAlign = r.Align;
     }
     [ObservableProperty] private string searchQuery = "";
+    [ObservableProperty] private bool searchWholeWord;
+
+    partial void OnSearchWholeWordChanged(bool value)
+    {
+        // Re-run the current search so the toggle takes effect immediately when there
+        // are results on screen. If the box is empty or no search has run yet, do nothing.
+        if (!string.IsNullOrWhiteSpace(SearchQuery) && SearchResults.Count > 0)
+        {
+            Search();
+        }
+    }
+
     [ObservableProperty] private string extractedText = "";
     [ObservableProperty] private bool hasDocument;
     [ObservableProperty] private Models.PdfAnnotation? selectedAnnotation;
@@ -766,9 +778,11 @@ public partial class MainViewModel : ObservableObject
         SearchResults.Clear();
         CurrentHitIndex = -1;
         if (_doc.Bytes is null || string.IsNullOrWhiteSpace(SearchQuery)) return;
-        var hits = _extract.Search(_doc.Bytes, SearchQuery);
+        var hits = _extract.Search(_doc.Bytes, SearchQuery, caseSensitive: false, wholeWord: SearchWholeWord);
         foreach (var h in hits) SearchResults.Add(h);
-        StatusText = $"{hits.Count} match(es) for \"{SearchQuery}\".";
+        StatusText = SearchWholeWord
+            ? $"{hits.Count} whole-word match(es) for \"{SearchQuery}\"."
+            : $"{hits.Count} match(es) for \"{SearchQuery}\".";
         NextSearchHitCommand.NotifyCanExecuteChanged();
         PrevSearchHitCommand.NotifyCanExecuteChanged();
         // Jump to first hit automatically.
@@ -1592,41 +1606,61 @@ public partial class MainViewModel : ObservableObject
                 : $"Rendering pages {first}-{last} for printing (notes hidden)...";
 
             // FixedDocument is a DispatcherObject and must be created + accessed on the
-            // UI thread only. Build it here; do the expensive page rasterisation on a
-            // background thread and marshal each page back to the UI thread to be added.
+            // UI thread only. Build it here; page rasterisation is CPU-bound and runs in
+            // parallel across cores. RenderPage returns a frozen BitmapSource so it's
+            // safe to hand across threads — we collect results into an indexed array to
+            // preserve page order, then add them to fixedDoc sequentially on the UI thread.
             var fixedDoc = new System.Windows.Documents.FixedDocument();
             fixedDoc.DocumentPaginator.PageSize = new System.Windows.Size(dlg.PrintableAreaWidth, dlg.PrintableAreaHeight);
 
             var printableW = dlg.PrintableAreaWidth;
             var printableH = dlg.PrintableAreaHeight;
+            var pageCount = last - first + 1;
+            var bitmaps = new System.Windows.Media.Imaging.BitmapSource[pageCount];
+            int completed = 0;
+            // Leave one core free for the UI thread; use at least one worker even on
+            // single-core hardware.
+            var parallelism = System.Math.Max(1, Environment.ProcessorCount - 1);
+
             await Task.Run(() =>
             {
-                for (int i = first - 1; i <= last - 1; i++)
-                {
-                    var bmp = _render.RenderPage(printBytes, i, dpi: 200);
-                    Application.Current.Dispatcher.Invoke(() =>
+                System.Threading.Tasks.Parallel.For(
+                    0, pageCount,
+                    new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = parallelism },
+                    k =>
                     {
-                        var page = new System.Windows.Documents.FixedPage
+                        int pageIdx = first - 1 + k;
+                        bitmaps[k] = _render.RenderPage(printBytes, pageIdx, dpi: 200);
+                        var done = System.Threading.Interlocked.Increment(ref completed);
+                        // Cheap status update every page — Dispatcher.BeginInvoke is fire-and-forget.
+                        Application.Current.Dispatcher.BeginInvoke(new System.Action(() =>
                         {
-                            Width = printableW,
-                            Height = printableH
-                        };
-                        var img = new System.Windows.Controls.Image
-                        {
-                            Source = bmp,
-                            Stretch = System.Windows.Media.Stretch.Uniform,
-                            Width = printableW,
-                            Height = printableH
-                        };
-                        System.Windows.Documents.FixedPage.SetLeft(img, 0);
-                        System.Windows.Documents.FixedPage.SetTop(img, 0);
-                        page.Children.Add(img);
-                        var pc = new System.Windows.Documents.PageContent();
-                        ((System.Windows.Markup.IAddChild)pc).AddChild(page);
-                        fixedDoc.Pages.Add(pc);
+                            StatusText = $"Rendering pages... {done}/{pageCount}";
+                        }), System.Windows.Threading.DispatcherPriority.Background);
                     });
-                }
             });
+
+            for (int k = 0; k < pageCount; k++)
+            {
+                var page = new System.Windows.Documents.FixedPage
+                {
+                    Width = printableW,
+                    Height = printableH
+                };
+                var img = new System.Windows.Controls.Image
+                {
+                    Source = bitmaps[k],
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                    Width = printableW,
+                    Height = printableH
+                };
+                System.Windows.Documents.FixedPage.SetLeft(img, 0);
+                System.Windows.Documents.FixedPage.SetTop(img, 0);
+                page.Children.Add(img);
+                var pc = new System.Windows.Documents.PageContent();
+                ((System.Windows.Markup.IAddChild)pc).AddChild(page);
+                fixedDoc.Pages.Add(pc);
+            }
 
             dlg.PrintDocument(fixedDoc.DocumentPaginator, Path.GetFileName(_doc.FilePath ?? "document"));
             StatusText = $"Sent pages {first}-{last} to {dlg.PrintQueue.Name}.";

@@ -269,6 +269,11 @@
                              BorderBrush="{DynamicResource InputFg}"
                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              KeyDown="SearchBox_KeyDown" ToolTip="Search text (Ctrl+F, Enter to run)"/>
+                    <CheckBox x:Name="TB_WholeWord" VerticalAlignment="Center" Margin="6,0,0,0"
+                              Content="Whole word"
+                              IsChecked="{Binding SearchWholeWord}"
+                              Foreground="{DynamicResource Foreground}"
+                              ToolTip="Match whole words only"/>
                     <Button Style="{StaticResource ToolButton}" x:Name="TB_Find" Command="{Binding SearchCommand}" ToolTip="Find">
                         <StackPanel><TextBlock Text="&#xE721;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Find" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>

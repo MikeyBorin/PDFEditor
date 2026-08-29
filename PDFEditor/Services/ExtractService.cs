@@ -197,7 +197,7 @@ public class ExtractService
         };
     }
 
-    public List<SearchHit> Search(byte[] pdfBytes, string query, bool caseSensitive = false)
+    public List<SearchHit> Search(byte[] pdfBytes, string query, bool caseSensitive = false, bool wholeWord = false)
     {
         var results = new List<SearchHit>();
         if (string.IsNullOrEmpty(query)) return results;
@@ -206,30 +206,98 @@ public class ExtractService
         using var pdf = PdfDocument.Open(ms);
         var cmp = caseSensitive ? System.StringComparison.Ordinal : System.StringComparison.OrdinalIgnoreCase;
 
+        // Split the query into whitespace-separated tokens once. Single-word queries
+        // fall through as a single-token array; multi-word queries drive consecutive-
+        // word run matching below.
+        var queryTokens = query.Split(
+            new[] { ' ', '\t', '\n', '\r' },
+            System.StringSplitOptions.RemoveEmptyEntries);
+        if (queryTokens.Length == 0) return results;
+
         foreach (Page page in pdf.GetPages())
         {
             var pageW = page.Width;
             var pageH = page.Height;
             var words = page.GetWords().ToList();
             var text = page.Text;
+
+            // Pre-compute the bounding regions (in top-left normalized coords) that
+            // correspond to each occurrence of the query on this page, in reading order.
+            // Single-word: one entry per matching word.
+            // Multi-word: one entry per consecutive-word run whose tokens match — box
+            // is the union of the run so line-wrapped phrases still get highlighted.
+            var regions = new List<(double nx, double ny, double nw, double nh)>();
+            if (queryTokens.Length == 1)
+            {
+                var single = queryTokens[0];
+                foreach (var wd in words)
+                {
+                    var wt = wd.Text ?? "";
+                    bool matches = wholeWord
+                        ? wt.Equals(single, cmp)
+                        : wt.IndexOf(single, cmp) >= 0;
+                    if (!matches) continue;
+                    var bb = wd.BoundingBox;
+                    regions.Add((
+                        bb.Left / pageW,
+                        1.0 - (bb.Top / pageH),
+                        bb.Width / pageW,
+                        bb.Height / pageH));
+                }
+            }
+            else
+            {
+                for (int i = 0; i <= words.Count - queryTokens.Length; i++)
+                {
+                    bool allMatch = true;
+                    for (int j = 0; j < queryTokens.Length; j++)
+                    {
+                        var wt = words[i + j].Text ?? "";
+                        bool tokenMatches = wholeWord
+                            ? wt.Equals(queryTokens[j], cmp)
+                            : wt.IndexOf(queryTokens[j], cmp) >= 0;
+                        if (!tokenMatches) { allMatch = false; break; }
+                    }
+                    if (!allMatch) continue;
+
+                    // Union bounding box (PDF coords: Top is high Y, Bottom is low Y).
+                    var first = words[i].BoundingBox;
+                    var last = words[i + queryTokens.Length - 1].BoundingBox;
+                    var left = System.Math.Min(first.Left, last.Left);
+                    var right = System.Math.Max(first.Right, last.Right);
+                    var top = System.Math.Max(first.Top, last.Top);
+                    var bottom = System.Math.Min(first.Bottom, last.Bottom);
+                    regions.Add((
+                        left / pageW,
+                        1.0 - (top / pageH),
+                        (right - left) / pageW,
+                        (top - bottom) / pageH));
+                }
+            }
+            int regionCursor = 0;
+
             int idx = 0;
             while ((idx = text.IndexOf(query, idx, cmp)) >= 0)
             {
+                // Whole-word gate applies to any query: the character just before the
+                // first match char and just after the last must not be word-forming.
+                // For multi-word queries this stops "in lin" hitting inside "in line",
+                // matching the strict region-based coord lookup below.
+                if (wholeWord && !IsWholeWordBoundary(text, idx, query.Length))
+                {
+                    idx += 1;
+                    continue;
+                }
+
                 var start = System.Math.Max(0, idx - 30);
                 var end = System.Math.Min(text.Length, idx + query.Length + 30);
                 var snippet = text.Substring(start, end - start).Replace('\n', ' ');
 
-                // Find matching word for coords (best-effort).
-                var w = words.FirstOrDefault(wd => wd.Text.IndexOf(query, cmp) >= 0);
-                if (w != null)
+                if (regionCursor < regions.Count)
                 {
-                    var bb = w.BoundingBox;
-                    // PdfPig uses PDF coords (origin bottom-left). Convert to top-left normalized.
-                    var nx = bb.Left / pageW;
-                    var ny = 1.0 - (bb.Top / pageH);
-                    var nw = bb.Width / pageW;
-                    var nh = bb.Height / pageH;
-                    results.Add(new SearchHit(page.Number - 1, snippet, nx, ny, nw, nh));
+                    var r = regions[regionCursor];
+                    regionCursor++;
+                    results.Add(new SearchHit(page.Number - 1, snippet, r.nx, r.ny, r.nw, r.nh));
                 }
                 else
                 {
@@ -240,4 +308,13 @@ public class ExtractService
         }
         return results;
     }
+
+    private static bool IsWholeWordBoundary(string text, int idx, int length)
+    {
+        bool leftOk  = idx == 0 || !IsWordChar(text[idx - 1]);
+        bool rightOk = idx + length >= text.Length || !IsWordChar(text[idx + length]);
+        return leftOk && rightOk;
+    }
+
+    private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 }
