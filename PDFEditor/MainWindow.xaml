@@ -166,6 +166,12 @@
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_TextStamp" Command="{Binding SetToolCommand}" CommandParameter="TextStamp" ToolTip="Text">
                         <StackPanel><TextBlock Text="&#xE8D2;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Text" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Tick" Command="{Binding SetToolCommand}" CommandParameter="Tick" ToolTip="Insert &#x2713; (checkbox tick)">
+                        <StackPanel><TextBlock Text="&#x2713;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Tick" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Cross" Command="{Binding SetToolCommand}" CommandParameter="Cross" ToolTip="Insert &#x2717; (checkbox cross)">
+                        <StackPanel><TextBlock Text="&#x2717;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="X" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    </Button>
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ink" Command="{Binding SetToolCommand}" CommandParameter="Ink" ToolTip="Freehand Draw">
                         <StackPanel><TextBlock Text="&#xEE56;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Draw" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>

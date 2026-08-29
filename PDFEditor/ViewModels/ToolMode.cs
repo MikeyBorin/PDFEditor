@@ -12,5 +12,7 @@ public enum ToolMode
     Whiteout,
     Erase,
     SelectText,
-    SelectImage
+    SelectImage,
+    Tick,
+    Cross
 }

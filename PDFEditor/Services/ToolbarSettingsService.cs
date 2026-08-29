@@ -114,6 +114,17 @@ public class ToolbarSettingsService
             Settings.ActiveProfileName = "Default";
             Save();
         }
+        else
+        {
+            // Migration: ensure newly-added toolbar entries appear in existing profiles.
+            // Only adds — never removes — so user-hidden items stay hidden.
+            var newlyAdded = new[] { "Tick", "Cross" };
+            bool changed = false;
+            foreach (var p in Settings.Profiles)
+                foreach (var id in newlyAdded)
+                    if (p.Visible.Add(id)) changed = true;
+            if (changed) Save();
+        }
     }
 
     /// <summary>The full list of toolbar command IDs the UI knows about. Order = default display order.</summary>
@@ -122,7 +133,7 @@ public class ToolbarSettingsService
         // File
         "Open", "Save", "Print", "EditInWord", "Undo",
         // Tools
-        "Select", "Highlight", "StickyNote", "TextStamp", "Ink", "Rectangle", "Ellipse", "Whiteout", "Erase",
+        "Select", "Highlight", "StickyNote", "TextStamp", "Tick", "Cross", "Ink", "Rectangle", "Ellipse", "Whiteout", "Erase",
         "SelectText", "SelectImage",
         // Colour block (represented as one toggle)
         "ColourSwatches",

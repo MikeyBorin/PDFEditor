@@ -538,6 +538,26 @@ public class AnnotationLayer : Canvas
             return;
         }
 
+        if (tool == ToolMode.Tick || tool == ToolMode.Cross)
+        {
+            // Form-mark drop: single glyph in bold at a fixed default size.
+            // Deliberately does NOT read/write CurrentFontSize — a form-fill mark
+            // shouldn't hijack the user's text-stamp font retention.
+            var glyph = tool == ToolMode.Tick ? "✓" : "✗";
+            var mark = new PdfAnnotation
+            {
+                PageIndex = Page.PageIndex, Kind = AnnotationKind.TextStamp,
+                X = nx, Y = ny, Width = 0.03, Height = 0.03,
+                Color = MainVM.CurrentColor, Text = glyph,
+                FontFamily = "Segoe UI Symbol", FontSize = 18, Bold = true
+            };
+            Page.Annotations.Add(mark);
+            MainVM.SelectedAnnotation = mark;
+            // One-shot: revert to Select so the next click drags/edits it.
+            MainVM.CurrentTool = ToolMode.Select;
+            return;
+        }
+
         _drafting = new PdfAnnotation
         {
             PageIndex = Page.PageIndex,

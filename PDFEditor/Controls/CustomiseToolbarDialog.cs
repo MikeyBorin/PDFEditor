@@ -19,6 +19,8 @@ public static class CustomiseToolbarDialog
         ("Highlight",    "Highlight"),
         ("StickyNote",   "Note"),
         ("TextStamp",    "Text"),
+        ("Tick",         "Tick (✓)"),
+        ("Cross",        "Cross (✗)"),
         ("Ink",          "Draw"),
         ("Rectangle",    "Rectangle"),
         ("Ellipse",      "Ellipse"),
