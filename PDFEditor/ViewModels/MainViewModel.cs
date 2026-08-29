@@ -30,6 +30,7 @@ public partial class MainViewModel : ObservableObject
     private readonly BookmarkService _bookmarks = new();
     private readonly SignatureLibraryService _signatures = new();
     private readonly FileAssociationService _fileAssoc = new();
+    private readonly TessdataDownloadService _tessDownload = new();
     public ToolbarSettingsService ToolbarSettings { get; } = new();
     public ThemeService Theme { get; } = new();
 
@@ -753,17 +754,84 @@ public partial class MainViewModel : ObservableObject
         StatusText = $"Extracted {text.Length:N0} chars.";
     }
 
+    /// <summary>Prompt the user; on Yes, download eng.traineddata. Returns true if OCR
+    /// is available afterwards (either already-installed, or freshly-downloaded).</summary>
+    private async Task<bool> PromptDownloadOcrDataAsync()
+    {
+        if (_ocr.IsAvailable) return true;
+
+        var choice = MessageBox.Show(
+            "OCR training data (eng.traineddata) is not installed.\n\n" +
+            "Would you like to download it now?\n\n" +
+            "Source: github.com/tesseract-ocr/tessdata\n" +
+            "Size: ~22 MB\n" +
+            "Installs to: " + _tessDownload.InstallDir,
+            "OCR training data required",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (choice != MessageBoxResult.Yes) return false;
+
+        await DownloadOcrData("eng");
+        return _ocr.IsAvailable;
+    }
+
+    [RelayCommand]
+    private Task DownloadOcrDataDefault() => DownloadOcrData("eng");
+
+    private async Task DownloadOcrData(string languageCode)
+    {
+        if (_tessDownload.IsInstalled(languageCode))
+        {
+            MessageBox.Show(
+                $"{languageCode}.traineddata is already installed at:\n{_tessDownload.DestinationPath(languageCode)}",
+                "OCR training data", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            StatusText = $"Downloading {languageCode}.traineddata...";
+            var progress = new Progress<(long downloaded, long? total)>(p =>
+            {
+                var mb = p.downloaded / (1024.0 * 1024.0);
+                if (p.total.HasValue)
+                {
+                    var totalMb = p.total.Value / (1024.0 * 1024.0);
+                    var pct = (int)(100.0 * p.downloaded / p.total.Value);
+                    StatusText = $"Downloading {languageCode}.traineddata... {mb:0.0}/{totalMb:0.0} MB ({pct}%)";
+                }
+                else
+                {
+                    StatusText = $"Downloading {languageCode}.traineddata... {mb:0.0} MB";
+                }
+            });
+            await _tessDownload.DownloadAsync(languageCode, progress, System.Threading.CancellationToken.None);
+            StatusText = $"OCR training data installed. OCR is now ready.";
+            RunOcrOnCurrentCommand.NotifyCanExecuteChanged();
+            OcrAllPagesCommand.NotifyCanExecuteChanged();
+            MakeSearchablePdfCommand.NotifyCanExecuteChanged();
+            MessageBox.Show(
+                $"Installed {languageCode}.traineddata at:\n{_tessDownload.DestinationPath(languageCode)}\n\nOCR is now available under Tools → OCR.",
+                "Download complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Download failed: " + ex.Message + "\n\n" +
+                "You can install manually — download eng.traineddata from\n" +
+                "https://github.com/tesseract-ocr/tessdata and place it in:\n" +
+                _tessDownload.InstallDir,
+                "Download failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText = "OCR training data download failed.";
+        }
+        finally { IsBusy = false; }
+    }
+
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task RunOcrOnCurrent()
     {
         if (_doc.Bytes is null || CurrentPage is null) return;
-        if (!_ocr.IsAvailable)
-        {
-            MessageBox.Show(
-                "Tesseract is not initialised.\n\nDownload 'eng.traineddata' from https://github.com/tesseract-ocr/tessdata and place it in a 'tessdata' folder next to PDFEditor.exe.",
-                "OCR unavailable", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
         IsBusy = true;
         var idx = CurrentPage.PageIndex;
         var text = await Task.Run(() => _ocr.OcrPage(_doc.Bytes!, idx));
@@ -1344,11 +1412,7 @@ public partial class MainViewModel : ObservableObject
     private async Task OcrAllPages()
     {
         if (_doc.Bytes is null) return;
-        if (!_ocr.IsAvailable)
-        {
-            MessageBox.Show("Tesseract is not installed. Add tessdata/eng.traineddata beside PDFEditor.exe.", "OCR unavailable", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
         var dlg = new SaveFileDialog { Filter = "Text (*.txt)|*.txt", FileName = Path.GetFileNameWithoutExtension(_doc.FilePath ?? "document") + "-ocr.txt" };
         if (dlg.ShowDialog() != true) return;
         try
@@ -1367,11 +1431,7 @@ public partial class MainViewModel : ObservableObject
     private async Task MakeSearchablePdf()
     {
         if (_doc.Bytes is null) return;
-        if (!_ocr.IsAvailable)
-        {
-            MessageBox.Show("Tesseract is not installed. Add tessdata/eng.traineddata beside PDFEditor.exe.", "OCR unavailable", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
+        if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
         var dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = Path.GetFileNameWithoutExtension(_doc.FilePath ?? "document") + "-searchable.pdf" };
         if (dlg.ShowDialog() != true) return;
         try

@@ -88,6 +88,7 @@
                 <MenuItem Header="OCR Current Page" Command="{Binding RunOcrOnCurrentCommand}"/>
                 <MenuItem Header="OCR All Pages → text file..." Command="{Binding OcrAllPagesCommand}"/>
                 <MenuItem Header="Make Searchable PDF (OCR)..." Command="{Binding MakeSearchablePdfCommand}"/>
+                <MenuItem Header="_Download OCR Training Data (English)..." Command="{Binding DownloadOcrDataDefaultCommand}" ToolTip="Downloads eng.traineddata (~22 MB) from GitHub and installs it into the app's tessdata folder."/>
                 <Separator/>
                 <MenuItem Header="Add _Watermark..." Command="{Binding AddWatermarkCommand}"/>
                 <MenuItem Header="Add _Headers &amp; Footers..." Command="{Binding AddHeadersFootersCommand}"/>

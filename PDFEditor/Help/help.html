@@ -454,9 +454,19 @@
     </ol>
 
     <h2 id="ocr">OCR</h2>
-    <p>Uses Tesseract. Requires <code>tessdata\eng.traineddata</code> to be placed next to
-      <code>PDFEditor.exe</code>. Get it from
-      <a href="https://github.com/tesseract-ocr/tessdata">github.com/tesseract-ocr/tessdata</a>.</p>
+    <p>Uses Tesseract. Needs a training-data file (<code>eng.traineddata</code>, ~22 MB)
+      installed alongside the exe at <code>tessdata\eng.traineddata</code>. You have two
+      ways to get it:</p>
+    <ul>
+      <li><strong>Tools → Download OCR Training Data (English)…</strong> — one-click
+        download from the official GitHub repo, straight into the app folder.</li>
+      <li>Or first-time you invoke any OCR command without the file, the app offers
+        the same download.</li>
+      <li>Or manual: grab <code>eng.traineddata</code> from
+        <a href="https://github.com/tesseract-ocr/tessdata">github.com/tesseract-ocr/tessdata</a>
+        and drop it in <code>tessdata\</code> next to <code>PDFEditor.exe</code>.</li>
+    </ul>
+    <p>Then:</p>
     <ul>
       <li><strong>OCR Current Page</strong> — writes recognised text to the extract panel.</li>
       <li><strong>OCR All Pages → text file</strong> — batch-OCR everything and save to a .txt file.</li>
