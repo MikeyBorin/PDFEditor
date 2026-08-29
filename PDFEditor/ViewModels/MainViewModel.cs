@@ -31,6 +31,11 @@ public partial class MainViewModel : ObservableObject
     private readonly SignatureLibraryService _signatures = new();
     private readonly FileAssociationService _fileAssoc = new();
     private readonly TessdataDownloadService _tessDownload = new();
+    private readonly TranslateService _translate = new();
+
+    // Persisted only for the current session (dialog reopens where you left off).
+    [ObservableProperty] private string translateSourceLang = "en";
+    [ObservableProperty] private string translateTargetLang = "fr";
     public ToolbarSettingsService ToolbarSettings { get; } = new();
     public ThemeService Theme { get; } = new();
 
@@ -745,6 +750,92 @@ public partial class MainViewModel : ObservableObject
         finally { IsBusy = false; }
     }
 
+    /// <summary>Translate a specific block of text (already extracted, e.g. from the
+    /// Select Text region tool). Same dialog + service as the menu-driven Translate.</summary>
+    private async Task TranslateSelectionAsync(string sourceText)
+    {
+        if (string.IsNullOrWhiteSpace(sourceText)) return;
+        var pick = Controls.TranslateDialog.Show(TranslateSourceLang, TranslateTargetLang, canDoAllPages: false);
+        if (pick is null) return;
+        TranslateSourceLang = pick.SourceCode;
+        TranslateTargetLang = pick.TargetCode;
+
+        try
+        {
+            IsBusy = true;
+            StatusText = $"Translating selection {pick.SourceCode} → {pick.TargetCode}...";
+            var progress = new Progress<(int done, int total)>(p =>
+            {
+                StatusText = $"Translating selection... chunk {p.done}/{p.total}";
+            });
+            var translated = await _translate.TranslateAsync(sourceText, pick.SourceCode, pick.TargetCode, progress, System.Threading.CancellationToken.None);
+            ExtractedText =
+                $"--- Translated selection {pick.SourceCode} → {pick.TargetCode} ---{Environment.NewLine}{Environment.NewLine}" +
+                $"[Original]{Environment.NewLine}{sourceText}{Environment.NewLine}{Environment.NewLine}" +
+                $"[Translated]{Environment.NewLine}{translated}";
+            StatusText = $"Translated selection ({sourceText.Length:N0} → {translated.Length:N0} chars).";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Translation failed: " + ex.Message + Environment.NewLine + Environment.NewLine +
+                "MyMemory has a free-tier daily limit (~10 KB of text per IP).",
+                "Translate failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText = "Translation failed.";
+        }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task Translate()
+    {
+        if (_doc.Bytes is null) return;
+        var pick = Controls.TranslateDialog.Show(TranslateSourceLang, TranslateTargetLang, canDoAllPages: Pages.Count > 0);
+        if (pick is null) return;
+        TranslateSourceLang = pick.SourceCode;
+        TranslateTargetLang = pick.TargetCode;
+
+        try
+        {
+            IsBusy = true;
+            string sourceText;
+            if (pick.AllPages)
+            {
+                sourceText = await Task.Run(() => _extract.ExtractAllText(_doc.Bytes!));
+            }
+            else
+            {
+                var idx = CurrentPage?.PageIndex ?? 0;
+                sourceText = await Task.Run(() => _extract.ExtractPageText(_doc.Bytes!, idx));
+            }
+            if (string.IsNullOrWhiteSpace(sourceText))
+            {
+                MessageBox.Show("No extractable text found on the selected page(s). If the PDF is a scan, run OCR first (Tools → Make Searchable PDF).",
+                    "Translate", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            StatusText = $"Translating {pick.SourceCode} → {pick.TargetCode}...";
+            var progress = new Progress<(int done, int total)>(p =>
+            {
+                StatusText = $"Translating {pick.SourceCode} → {pick.TargetCode}... chunk {p.done}/{p.total}";
+            });
+            var translated = await _translate.TranslateAsync(sourceText, pick.SourceCode, pick.TargetCode, progress, System.Threading.CancellationToken.None);
+            var scope = pick.AllPages ? "all pages" : $"page {(CurrentPage?.PageIndex ?? 0) + 1}";
+            ExtractedText = $"--- Translated {pick.SourceCode} → {pick.TargetCode} ({scope}) ---{Environment.NewLine}{Environment.NewLine}{translated}";
+            StatusText = $"Translated {sourceText.Length:N0} chars → {translated.Length:N0} chars.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Translation failed: " + ex.Message + Environment.NewLine + Environment.NewLine +
+                "MyMemory has a free-tier daily limit (~10 KB of text per IP). If you hit the limit, wait 24 h or try again from a different network.",
+                "Translate failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusText = "Translation failed.";
+        }
+        finally { IsBusy = false; }
+    }
+
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task ExtractText()
     {
@@ -949,6 +1040,9 @@ public partial class MainViewModel : ObservableObject
                     break;
                 case Controls.RegionAction.Replace:
                     ReplaceRegionWithText(pageIndex, nx, ny, nw, nh, region);
+                    break;
+                case Controls.RegionAction.Translate:
+                    _ = TranslateSelectionAsync(region.Text);
                     break;
             }
             // One-shot: revert to Select after Copy or Cancel. Replace already does this

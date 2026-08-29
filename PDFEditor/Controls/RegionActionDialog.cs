@@ -3,7 +3,7 @@ using System.Windows.Controls;
 
 namespace PDFEditor.Controls;
 
-public enum RegionAction { None, Copy, Replace, Save }
+public enum RegionAction { None, Copy, Replace, Save, Translate }
 
 public static class RegionActionDialog
 {
@@ -12,7 +12,12 @@ public static class RegionActionDialog
         return Show(
             title: "Selected text",
             preview: previewText,
-            options: new[] { ("Copy", RegionAction.Copy), ("Replace...", RegionAction.Replace) },
+            options: new[]
+            {
+                ("Copy", RegionAction.Copy),
+                ("Replace...", RegionAction.Replace),
+                ("Translate...", RegionAction.Translate),
+            },
             isImage: false);
     }
 

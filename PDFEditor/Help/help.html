@@ -217,6 +217,7 @@
       <li><a href="#convert-out">Export from PDF</a></li>
       <li><a href="#word-roundtrip">Edit in Word</a></li>
       <li><a href="#ocr">OCR</a></li>
+      <li><a href="#translate">Translate</a></li>
       <li><a href="#overlays">Watermarks, headers, Bates</a></li>
       <li><a href="#forms">Fill forms</a></li>
       <li><a href="#security">Security</a></li>
@@ -473,6 +474,32 @@
       <li><strong>Make Searchable PDF (OCR)…</strong> — rasterises each page and lays down an
         invisible text layer over it. The result looks identical but is searchable/copyable.</li>
     </ul>
+
+    <h2 id="translate">Translate</h2>
+    <p>Sends text to <a href="https://mymemory.translated.net">MyMemory</a>, a free
+      public translation API. No signup, no API key — just plain HTTPS. Results appear
+      in the extract panel.</p>
+    <p>Three ways to translate:</p>
+    <ul>
+      <li><strong>Tools → Translate…</strong> — whole current page (or tick "All pages"
+        in the dialog).</li>
+      <li><strong>Select Text</strong> tool → drag over a paragraph → the region
+        action dialog now includes a <strong>Translate…</strong> button alongside
+        Copy and Replace. The dialog opens with the selected text pre-set as the
+        source; result shows original + translation side-by-side in the extract panel.</li>
+      <li>Both paths pop the same language picker (source + target). Choices persist
+        across the session so you don't have to re-pick every time.</li>
+    </ul>
+    <p>Supported languages include English, Spanish, French, German, Italian,
+      Portuguese, Dutch, Polish, Russian, Turkish, Swedish, Greek, Hebrew, Arabic,
+      Hindi, Chinese (Simplified), Japanese, Korean, Vietnamese, Thai and more.</p>
+    <div class="note">
+      <strong>Daily limit.</strong> MyMemory allows roughly 10 KB of text per IP address
+      per day for anonymous use. Enough for reading pages ad-hoc; a whole 100-page
+      document at once will hit the ceiling. If translation fails with a quota error,
+      wait 24 h or try again from a different network. If your document is scan-only,
+      run <em>Tools → Make Searchable PDF</em> first so there's extractable text.
+    </div>
 
     <h2 id="overlays">Watermarks, headers &amp; footers, Bates numbering</h2>
     <ul>
