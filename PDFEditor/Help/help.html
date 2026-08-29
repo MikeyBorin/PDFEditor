@@ -146,6 +146,20 @@
     border-radius: 4px;
     color: var(--muted);
   }
+  .warn {
+    background: rgba(255, 176, 32, 0.10);
+    border-left: 4px solid #d68a00;
+    padding: 12px 16px;
+    margin: 0 0 22px 0;
+    font-size: 14px;
+    border-radius: 0 4px 4px 0;
+    color: var(--fg);
+  }
+  .warn strong { color: #d68a00; letter-spacing: 0.02em; }
+  @media (prefers-color-scheme: dark) {
+    .warn { background: rgba(255, 176, 32, 0.08); border-left-color: #e4a230; }
+    .warn strong { color: #e4a230; }
+  }
   .glyph {
     display: inline-block; width: 18px; text-align: center;
     color: var(--accent); font-weight: 600;
@@ -176,6 +190,7 @@
     <h1>PDF Editor</h1>
     <div class="sub">Help &amp; reference</div>
     <ul>
+      <li><a href="#disclaimer">Disclaimer</a></li>
       <li><a href="#overview">Overview</a></li>
       <li><a href="#getting-started">Getting started</a></li>
       <li><a href="#viewing">Viewing &amp; navigation</a></li>
@@ -226,6 +241,19 @@
       <h1>PDF Editor — Help</h1>
       <p>A free desktop PDF editor for Windows. This page covers every feature currently in the app.</p>
     </header>
+
+    <div class="warn" id="disclaimer">
+      <strong>DISCLAIMER — USE AT YOUR OWN RISK.</strong>
+      <p style="margin: 8px 0 0 0;">
+        This software is provided <em>"as is"</em>, without warranty of any kind, express or
+        implied — including but not limited to the warranties of merchantability, fitness for
+        a particular purpose, and non-infringement. There is <strong>no guarantee</strong>
+        that it is fit for any particular use. The author accepts <strong>no liability</strong>
+        for data loss, corrupted files, missed information, incorrect edits, or any other
+        damages arising from use of this software. Always keep backups of important documents
+        before editing. See the <code>LICENSE</code> file for full terms (MIT License).
+      </p>
+    </div>
 
     <h2 id="overview">Overview</h2>
     <p>

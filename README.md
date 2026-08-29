@@ -139,3 +139,13 @@ signatures with certificate chains.
 ## Licence
 
 MIT. Third-party libraries retain their own licences (all permissive).
+See the [LICENSE](LICENSE) file for full terms.
+
+## Disclaimer
+
+**USE AT YOUR OWN RISK.** This software is provided "as is", without warranty
+of any kind, express or implied. There is no guarantee it is fit for any
+particular purpose. The author accepts no liability for data loss, corrupted
+files, missed information, incorrect edits, or any other damages arising
+from use of this software. Always keep backups of important documents before
+editing.

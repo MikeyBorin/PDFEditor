@@ -379,7 +379,15 @@ public partial class MainWindow : Window
             "PDF Editor\n\n" +
             "Free desktop PDF editor built with WPF, PdfSharpCore, PDFium, PdfPig and Tesseract.\n" +
             "All components use permissive open-source licences.\n\n" +
-            "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.",
+            "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.\n\n" +
+            "─────────────────────────────────────────────\n" +
+            "DISCLAIMER\n\n" +
+            "This software is provided \"AS IS\", without warranty of any kind, express " +
+            "or implied. There is no guarantee that it is fit for any particular purpose. " +
+            "The author accepts no liability for data loss, corrupted files, or any other " +
+            "damages arising from use of this software.\n\n" +
+            "USE AT YOUR OWN RISK. Keep backups of important documents before editing.\n\n" +
+            "See the LICENSE file for full terms (MIT License).",
             "About", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }
