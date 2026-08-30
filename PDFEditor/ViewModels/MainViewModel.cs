@@ -84,6 +84,10 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(HasDocumentAndPages))]
     private void GoToPage()
     {
+        // Guard against callers that bypass CanExecute (e.g. PageNumberBox_KeyDown
+        // calling Execute(null) directly). With Pages empty, Math.Clamp(x, 0, -1)
+        // throws ArgumentException because max < min.
+        if (Pages.Count == 0) return;
         if (int.TryParse(PageNumberInput?.Trim(), out var n))
         {
             var idx = Math.Clamp(n - 1, 0, Pages.Count - 1);
@@ -542,6 +546,7 @@ public partial class MainViewModel : ObservableObject
         CurrentPage = null;
         ExtractedText = "";
         SearchResults.Clear();
+        PageNumberInput = "0";
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
