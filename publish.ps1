@@ -115,6 +115,8 @@ $issScript = Join-Path $RepoRoot "installer\ArtiMaxPDFEditor.iss"
 if (Test-Path $issScript) {
     $iscc = $null
     foreach ($p in @(
+        "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe"
