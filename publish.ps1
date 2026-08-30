@@ -101,8 +101,47 @@ if (-not $SkipZip) {
     $sizeMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
     Write-Host ""
     Write-Host "Wrote $zip  ($sizeMB MB)" -ForegroundColor Green
-    Write-Host "Attach it to a GitHub Release, or share the file directly." -ForegroundColor DarkGray
 } else {
     Write-Host ""
     Write-Host "Staging folder ready: $Staging" -ForegroundColor Green
 }
+
+# --- Installer (Inno Setup) -- best effort ----------------------------------
+# Wraps the same staging folder into a familiar Windows Setup.exe (Start Menu
+# shortcut, Add/Remove Programs entry, optional file association). If Inno
+# Setup isn't installed we skip and just note it -- the ZIP is still enough
+# to publish.
+$issScript = Join-Path $RepoRoot "installer\ArtiMaxPDFEditor.iss"
+if (Test-Path $issScript) {
+    $iscc = $null
+    foreach ($p in @(
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe"
+    )) { if ($p -and (Test-Path $p)) { $iscc = $p; break } }
+    if (-not $iscc) {
+        $cmd = Get-Command "iscc.exe" -ErrorAction SilentlyContinue
+        if ($cmd) { $iscc = $cmd.Source }
+    }
+
+    if ($iscc) {
+        Write-Host ""
+        Write-Host "Building Setup.exe via Inno Setup..." -ForegroundColor Cyan
+        & $iscc "/Qp" "/DAppVersion=$Version" $issScript
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Inno Setup exited with code $LASTEXITCODE. Setup.exe was not produced."
+        } else {
+            $setupExe = Join-Path $DistDir "ArtiMaxPDFEditor-Setup-$Version.exe"
+            if (Test-Path $setupExe) {
+                $setupMB = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
+                Write-Host "Wrote $setupExe  ($setupMB MB)" -ForegroundColor Green
+            }
+        }
+    } else {
+        Write-Host ""
+        Write-Warning "Inno Setup not found -- skipping Setup.exe build. Install from https://jrsoftware.org/isdl.php and re-run publish.ps1 to include it in the next build."
+    }
+}
+
+Write-Host ""
+Write-Host "Ship dist\$Stem.zip and (if built) dist\ArtiMaxPDFEditor-Setup-$Version.exe." -ForegroundColor DarkGray
