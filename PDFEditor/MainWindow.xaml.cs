@@ -381,7 +381,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.0\n\n" +
+            "ArtiMax PDF Editor  v1.0.1\n\n" +
             "Free desktop PDF editor by ArtiMax, built with WPF, PdfSharpCore, PDFium,\n" +
             "PdfPig and Tesseract. All components use permissive open-source licences.\n\n" +
             "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.\n" +

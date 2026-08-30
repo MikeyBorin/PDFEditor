@@ -53,7 +53,7 @@ public static class WelcomeDialog
         });
         root.Children.Add(new TextBlock
         {
-            Text = "Free desktop PDF editor · v1.0.0 · by ArtiMax",
+            Text = "Free desktop PDF editor · v1.0.1 · by ArtiMax",
             Opacity = 0.7,
             Margin = new Thickness(0, 0, 0, 18)
         });
