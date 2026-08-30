@@ -58,11 +58,27 @@ public class AnnotationService
                         break;
 
                     case AnnotationKind.Rectangle:
-                        gfx.DrawRectangle(pen, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        if (a.Filled)
+                        {
+                            var fillBrush = new XSolidBrush(XColor.FromArgb(a.Color.A, a.Color.R, a.Color.G, a.Color.B));
+                            gfx.DrawRectangle(fillBrush, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        }
+                        else
+                        {
+                            gfx.DrawRectangle(pen, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        }
                         break;
 
                     case AnnotationKind.Ellipse:
-                        gfx.DrawEllipse(pen, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        if (a.Filled)
+                        {
+                            var fillBrush = new XSolidBrush(XColor.FromArgb(a.Color.A, a.Color.R, a.Color.G, a.Color.B));
+                            gfx.DrawEllipse(fillBrush, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        }
+                        else
+                        {
+                            gfx.DrawEllipse(pen, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        }
                         break;
 
                     case AnnotationKind.Ink:

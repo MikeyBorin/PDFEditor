@@ -14,5 +14,7 @@ public enum ToolMode
     SelectText,
     SelectImage,
     Tick,
-    Cross
+    Cross,
+    RectangleFilled,
+    EllipseFilled
 }

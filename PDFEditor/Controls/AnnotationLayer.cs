@@ -333,8 +333,9 @@ public class AnnotationLayer : Canvas
                 {
                     Width = a.Width * w,
                     Height = a.Height * h,
-                    Stroke = brush,
-                    StrokeThickness = a.StrokeThickness,
+                    Stroke = a.Filled ? null : brush,
+                    StrokeThickness = a.Filled ? 0 : a.StrokeThickness,
+                    Fill = a.Filled ? brush : null,
                     IsHitTestVisible = false // canvas handles all clicks; drag is by bounds check
                 };
                 SetLeft(r, a.X * w); SetTop(r, a.Y * h);
@@ -345,8 +346,9 @@ public class AnnotationLayer : Canvas
                 {
                     Width = a.Width * w,
                     Height = a.Height * h,
-                    Stroke = brush,
-                    StrokeThickness = a.StrokeThickness,
+                    Stroke = a.Filled ? null : brush,
+                    StrokeThickness = a.Filled ? 0 : a.StrokeThickness,
+                    Fill = a.Filled ? brush : null,
                     IsHitTestVisible = false // canvas handles all clicks; drag is by bounds check
                 };
                 SetLeft(el, a.X * w); SetTop(el, a.Y * h);
@@ -572,8 +574,8 @@ public class AnnotationLayer : Canvas
             Kind = tool switch
             {
                 ToolMode.Highlight => AnnotationKind.Highlight,
-                ToolMode.Rectangle => AnnotationKind.Rectangle,
-                ToolMode.Ellipse => AnnotationKind.Ellipse,
+                ToolMode.Rectangle or ToolMode.RectangleFilled => AnnotationKind.Rectangle,
+                ToolMode.Ellipse   or ToolMode.EllipseFilled   => AnnotationKind.Ellipse,
                 ToolMode.Ink => AnnotationKind.Ink,
                 ToolMode.Whiteout => AnnotationKind.Whiteout,
                 ToolMode.SelectText or ToolMode.SelectImage => AnnotationKind.Rectangle, // draft preview only
@@ -583,7 +585,8 @@ public class AnnotationLayer : Canvas
             Color = tool is ToolMode.SelectText or ToolMode.SelectImage
                 ? System.Windows.Media.Colors.DodgerBlue
                 : MainVM.CurrentColor,
-            StrokeThickness = MainVM.CurrentThickness
+            StrokeThickness = MainVM.CurrentThickness,
+            Filled = tool is ToolMode.RectangleFilled or ToolMode.EllipseFilled
         };
 
         if (_drafting.Kind == AnnotationKind.Ink)

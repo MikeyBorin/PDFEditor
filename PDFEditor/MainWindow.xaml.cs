@@ -221,34 +221,89 @@ public partial class MainWindow : Window
 
     private void ThumbList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // Selection change triggered by a click on a thumbnail (not by scroll-driven
+        // selection change): jump the main viewer to the picked page. Proportional
+        // scroll sync then takes care of aligning the sidebar itself.
+        if (_mainScrollDrivingSelection) return;
         if (VM.CurrentPage is null) return;
         VM.RequestScrollIntoView(VM.CurrentPage.PageIndex, 0.5, 0.05);
     }
 
-    private void PagesScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    // Proportional scroll sync between the main viewer and the thumbnail sidebar —
+    // both scrollbars behave like the same scrollbar in two skins. Guard flags
+    // stop the two ScrollChanged handlers from ping-ponging into a feedback loop.
+    private System.Windows.Controls.ScrollViewer? _thumbScrollViewer;
+    private bool _syncingMainFromThumb;
+    private bool _syncingThumbFromMain;
+    private bool _mainScrollDrivingSelection;
+
+    private void EnsureThumbScrollViewer()
     {
-        if (_suppressScrollChange) return;
-        // Find the ItemsControl → StackPanel with page items and figure out which is centered.
-        var sv = (ScrollViewer)sender;
-        var items = FindVisualChild<ItemsControl>(sv);
-        if (items is null || items.Items.Count == 0) return;
-        double viewportMid = sv.VerticalOffset + sv.ViewportHeight / 2.0;
-        for (int i = 0; i < items.Items.Count; i++)
+        if (_thumbScrollViewer != null) return;
+        if (FindName("ThumbList") is System.Windows.Controls.ListBox lb)
         {
-            var container = items.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
-            if (container is null) continue;
-            var transform = container.TransformToAncestor(items);
-            var topInItems = transform.Transform(new Point(0, 0)).Y;
-            var bottomInItems = topInItems + container.ActualHeight;
-            if (viewportMid >= topInItems && viewportMid <= bottomInItems)
+            _thumbScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(lb);
+            if (_thumbScrollViewer != null)
             {
-                if (items.Items[i] is ViewModels.PageViewModel pvm && !ReferenceEquals(VM.CurrentPage, pvm))
-                {
-                    VM.CurrentPage = pvm;
-                }
-                return;
+                _thumbScrollViewer.ScrollChanged += ThumbScrollViewer_ScrollChanged;
             }
         }
+    }
+
+    private void PagesScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        EnsureThumbScrollViewer();
+        if (_suppressScrollChange) return;
+        var sv = (ScrollViewer)sender;
+
+        // Update CurrentPage to whichever page is centered in the viewport.
+        var items = FindVisualChild<ItemsControl>(sv);
+        if (items != null && items.Items.Count > 0)
+        {
+            double viewportMid = sv.VerticalOffset + sv.ViewportHeight / 2.0;
+            for (int i = 0; i < items.Items.Count; i++)
+            {
+                var container = items.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
+                if (container is null) continue;
+                var transform = container.TransformToAncestor(items);
+                var topInItems = transform.Transform(new Point(0, 0)).Y;
+                var bottomInItems = topInItems + container.ActualHeight;
+                if (viewportMid >= topInItems && viewportMid <= bottomInItems)
+                {
+                    if (items.Items[i] is ViewModels.PageViewModel pvm && !ReferenceEquals(VM.CurrentPage, pvm))
+                    {
+                        _mainScrollDrivingSelection = true;
+                        try { VM.CurrentPage = pvm; }
+                        finally { _mainScrollDrivingSelection = false; }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Proportional sync: thumb sidebar mirrors the main viewer's scroll ratio.
+        // Skip if this scroll was itself caused by thumb → main sync (prevents loop).
+        if (!_syncingMainFromThumb && _thumbScrollViewer != null)
+        {
+            var mainRange  = System.Math.Max(1, sv.ExtentHeight - sv.ViewportHeight);
+            var thumbRange = System.Math.Max(1, _thumbScrollViewer.ExtentHeight - _thumbScrollViewer.ViewportHeight);
+            var ratio = sv.VerticalOffset / mainRange;
+            _syncingThumbFromMain = true;
+            try { _thumbScrollViewer.ScrollToVerticalOffset(ratio * thumbRange); }
+            finally { _syncingThumbFromMain = false; }
+        }
+    }
+
+    private void ThumbScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_syncingThumbFromMain) return;
+        var thumb = (ScrollViewer)sender;
+        var thumbRange = System.Math.Max(1, thumb.ExtentHeight - thumb.ViewportHeight);
+        var mainRange  = System.Math.Max(1, PagesScroller.ExtentHeight - PagesScroller.ViewportHeight);
+        var ratio = thumb.VerticalOffset / thumbRange;
+        _syncingMainFromThumb = true;
+        try { PagesScroller.ScrollToVerticalOffset(ratio * mainRange); }
+        finally { _syncingMainFromThumb = false; }
     }
 
     private static T? FindVisualChild<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject

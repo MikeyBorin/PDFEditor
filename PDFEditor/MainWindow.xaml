@@ -183,11 +183,17 @@
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ink" Command="{Binding SetToolCommand}" CommandParameter="Ink" ToolTip="Freehand Draw">
                         <StackPanel><TextBlock Text="&#xEE56;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Draw" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Rectangle" Command="{Binding SetToolCommand}" CommandParameter="Rectangle" ToolTip="Rectangle">
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Rectangle" Command="{Binding SetToolCommand}" CommandParameter="Rectangle" ToolTip="Rectangle (outlined)">
                         <StackPanel><TextBlock Text="&#xE003;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Rect" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ellipse" Command="{Binding SetToolCommand}" CommandParameter="Ellipse" ToolTip="Ellipse">
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_RectangleFilled" Command="{Binding SetToolCommand}" CommandParameter="RectangleFilled" ToolTip="Rectangle filled with current colour">
+                        <StackPanel><TextBlock Text="&#xE15C;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Rect ●" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ellipse" Command="{Binding SetToolCommand}" CommandParameter="Ellipse" ToolTip="Oval (outlined)">
                         <StackPanel><TextBlock Text="&#xEA3B;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Oval" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_EllipseFilled" Command="{Binding SetToolCommand}" CommandParameter="EllipseFilled" ToolTip="Oval filled with current colour">
+                        <StackPanel><TextBlock Text="&#xEB4C;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Oval ●" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Whiteout" Command="{Binding SetToolCommand}" CommandParameter="Whiteout" ToolTip="Whiteout — cover with a white box">
                         <StackPanel><TextBlock Text="&#xE711;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="White" Style="{StaticResource ToolLabel}"/></StackPanel>
@@ -327,6 +333,8 @@
                              SelectedItem="{Binding CurrentPage, Mode=TwoWay}"
                              SelectionChanged="ThumbList_SelectionChanged"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.CanContentScroll="False"
+                             VirtualizingStackPanel.IsVirtualizing="False"
                              HorizontalContentAlignment="Center"
                              AllowDrop="True"
                              PreviewMouseLeftButtonDown="ThumbList_PreviewMouseLeftButtonDown"

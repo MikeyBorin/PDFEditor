@@ -45,4 +45,6 @@ public class PdfAnnotation
     public bool Underline { get; set; }
     public TextAlign Align { get; set; } = TextAlign.Left;
     public List<(double X, double Y)> InkPoints { get; set; } = new();
+    /// <summary>Rectangle / Ellipse only: draw as filled instead of outlined.</summary>
+    public bool Filled { get; set; }
 }
