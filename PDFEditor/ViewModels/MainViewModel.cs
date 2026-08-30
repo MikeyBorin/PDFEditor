@@ -112,7 +112,7 @@ public partial class MainViewModel : ObservableObject
                       "(Windows blocks apps from taking the default automatically — this is an " +
                       "anti-hijacking measure, not something we can override.)\n\n" +
                       "Registered exe: " + (Environment.ProcessPath ?? "(unknown)");
-            MessageBox.Show(msg, "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(msg, "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             StatusText = "Registered as PDF handler.";
         }
         catch (Exception ex)
@@ -131,7 +131,7 @@ public partial class MainViewModel : ObservableObject
                 "PDF Editor removed from the Windows file-association list.\n\n" +
                 "If it was your default handler, Windows will fall back to the previous app " +
                 "(or ask you to pick one) next time you open a .pdf.",
-                "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+                "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             StatusText = "Unregistered as PDF handler.";
         }
         catch (Exception ex)
@@ -165,7 +165,7 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private PageViewModel? currentPage;
     [ObservableProperty] private string statusText = "Ready. Open a PDF to begin.";
-    [ObservableProperty] private string title = "PDF Editor";
+    [ObservableProperty] private string title = "ArtiMax PDF Editor";
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private double zoom = 1.0;
     [ObservableProperty] private int renderDpi = 150;
@@ -281,8 +281,8 @@ public partial class MainViewModel : ObservableObject
 
         HasDocument = _doc.Bytes != null;
         Title = _doc.FilePath is null
-            ? "PDF Editor"
-            : $"PDF Editor - {Path.GetFileName(_doc.FilePath)}{(_doc.IsDirty ? " *" : "")}";
+            ? "ArtiMax PDF Editor"
+            : $"ArtiMax PDF Editor - {Path.GetFileName(_doc.FilePath)}{(_doc.IsDirty ? " *" : "")}";
         StatusText = HasDocument
             ? $"{_doc.PageCount} page{(_doc.PageCount == 1 ? "" : "s")}."
             : "Ready.";
@@ -411,7 +411,7 @@ public partial class MainViewModel : ObservableObject
         if (!File.Exists(path))
         {
             _recents.Remove(path);
-            MessageBox.Show($"File no longer exists:\n{path}", "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"File no longer exists:\n{path}", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         await LoadFileAsync(path);
@@ -568,7 +568,7 @@ public partial class MainViewModel : ObservableObject
         if (CurrentPage is null || _doc.Bytes is null) return;
         if (_doc.PageCount <= 1)
         {
-            MessageBox.Show("A PDF must have at least one page.", "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("A PDF must have at least one page.", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var idx = CurrentPage.PageIndex;
@@ -675,7 +675,7 @@ public partial class MainViewModel : ObservableObject
         if (_doc.Bytes is null) return;
         if (!_word.IsWordAvailable)
         {
-            MessageBox.Show("Microsoft Word is required for the round-trip editor.", "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Microsoft Word is required for the round-trip editor.", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -1340,7 +1340,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null || SearchResults.Count == 0)
         {
-            MessageBox.Show("Run a Find first, then this command paints black boxes over each hit.", "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Run a Find first, then this command paints black boxes over each hit.", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var confirm = MessageBox.Show(
@@ -1362,7 +1362,7 @@ public partial class MainViewModel : ObservableObject
 
         if (annos.Count == 0)
         {
-            MessageBox.Show("No search hits with location data — cannot redact.", "PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("No search hits with location data — cannot redact.", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 

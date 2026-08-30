@@ -21,7 +21,7 @@ public class ThemeService
 
     public ThemeService()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PDFEditor");
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArtiMaxPDFEditor");
         Directory.CreateDirectory(dir);
         _settingsPath = Path.Combine(dir, "theme.json");
         try

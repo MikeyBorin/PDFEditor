@@ -34,7 +34,7 @@ public class TessdataDownloadService
         var temp = destination + ".part";
 
         using var http = new HttpClient();
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("PDFEditor");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("ArtiMaxPDFEditor");
         // GitHub raw redirects; give it room to follow.
         http.Timeout = TimeSpan.FromMinutes(5);
 

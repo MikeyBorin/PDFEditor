@@ -1,8 +1,8 @@
-# PDFEditor
+# ArtiMax PDF Editor
 
-A free, licence-free desktop PDF editor for Windows, built in a single Claude Code
-session. Aims to cover the everyday features people actually reach for in Adobe
-Acrobat, without the subscription.
+A free, licence-free desktop PDF editor for Windows by **ArtiMax**. Aims to cover
+the everyday features people actually reach for in Adobe Acrobat, without the
+subscription.
 
 Built on **.NET 9 / WPF** using only permissive open-source libraries: PdfSharpCore
 (MIT), PDFium via PDFtoImage (Apache 2.0), PdfPig (Apache 2.0), Tesseract

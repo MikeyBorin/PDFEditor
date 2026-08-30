@@ -21,7 +21,7 @@ public class SignatureLibraryService
 
     public SignatureLibraryService()
     {
-        LibraryDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PDFEditor", "signatures");
+        LibraryDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArtiMaxPDFEditor", "signatures");
         Directory.CreateDirectory(LibraryDir);
     }
 

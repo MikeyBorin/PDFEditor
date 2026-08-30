@@ -12,10 +12,10 @@ namespace PDFEditor.Services;
 /// </summary>
 public class FileAssociationService
 {
-    private const string ProgId          = "PDFEditor.PDFDocument";
-    private const string AppRegKey       = "PDFEditor";
-    private const string AppFriendlyName = "PDF Editor";
-    private const string AppDescription  = "Free desktop PDF editor (portable, MIT-licensed).";
+    private const string ProgId          = "ArtiMax.PDFDocument";
+    private const string AppRegKey       = "ArtiMaxPDFEditor";
+    private const string AppFriendlyName = "ArtiMax PDF Editor";
+    private const string AppDescription  = "Free desktop PDF editor by ArtiMax (portable, MIT-licensed).";
 
     private static string? ExePath => Environment.ProcessPath;
 

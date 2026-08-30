@@ -48,7 +48,7 @@ if (-not $Version) {
     if ($desc) { $Version = $desc.Trim() } else { $Version = "dev-" + (Get-Date -Format "yyyyMMdd") }
 }
 
-$Stem    = "PDFEditor-$Version-$Runtime"
+$Stem    = "ArtiMaxPDFEditor-$Version-$Runtime"
 $Staging = Join-Path $DistDir $Stem
 
 Write-Host "Building $Stem..." -ForegroundColor Cyan

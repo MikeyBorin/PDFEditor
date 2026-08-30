@@ -8,10 +8,18 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\PDFEditor.ico</ApplicationIcon>
-    <AssemblyName>PDFEditor</AssemblyName>
+    <AssemblyName>ArtiMaxPDFEditor</AssemblyName>
     <RootNamespace>PDFEditor</RootNamespace>
     <LangVersion>latest</LangVersion>
     <NoWarn>CA1416;NU1701</NoWarn>
+    <!-- Assembly / file properties shown in Windows Explorer, Task Manager, Right-click Properties. -->
+    <Product>ArtiMax PDF Editor</Product>
+    <AssemblyTitle>ArtiMax PDF Editor</AssemblyTitle>
+    <Company>ArtiMax</Company>
+    <Copyright>Copyright (c) 2026 ArtiMax / Michael Borin. MIT License.</Copyright>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

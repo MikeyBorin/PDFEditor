@@ -26,7 +26,7 @@ public class ToolbarSettingsService
 
     public ToolbarSettingsService()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "PDFEditor");
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArtiMaxPDFEditor");
         Directory.CreateDirectory(dir);
         _path = Path.Combine(dir, "toolbar.json");
         Load();

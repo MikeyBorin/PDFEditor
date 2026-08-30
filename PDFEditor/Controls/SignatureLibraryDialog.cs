@@ -107,7 +107,7 @@ public static class SignatureLibraryDialog
         place.Click += (_, _) =>
         {
             if (list.SelectedItem is SignatureEntry sel) { picked = sel; w.DialogResult = true; }
-            else MessageBox.Show("Select a signature first.", "PDF Editor");
+            else MessageBox.Show("Select a signature first.", "ArtiMax PDF Editor");
         };
 
         return w.ShowDialog() == true ? picked : null;
