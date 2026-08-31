@@ -118,7 +118,7 @@ public class ToolbarSettingsService
         {
             // Migration: ensure newly-added toolbar entries appear in existing profiles.
             // Only adds — never removes — so user-hidden items stay hidden.
-            var newlyAdded = new[] { "Tick", "Cross", "RectangleFilled", "EllipseFilled" };
+            var newlyAdded = new[] { "Tick", "Cross", "RectangleFilled", "EllipseFilled", "TextGroup", "ShapeGroup" };
             bool changed = false;
             foreach (var p in Settings.Profiles)
                 foreach (var id in newlyAdded)
@@ -133,7 +133,7 @@ public class ToolbarSettingsService
         // File
         "Open", "Save", "Print", "EditInWord", "Undo",
         // Tools
-        "Select", "Highlight", "StickyNote", "TextStamp", "Tick", "Cross", "Ink", "Rectangle", "RectangleFilled", "Ellipse", "EllipseFilled", "Whiteout", "Erase",
+        "Select", "Highlight", "StickyNote", "TextGroup", "ShapeGroup", "Whiteout", "Erase",
         "SelectText", "SelectImage",
         // Colour block (represented as one toggle)
         "ColourSwatches",

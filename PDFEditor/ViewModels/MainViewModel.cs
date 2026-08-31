@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly SecurityService _security = new();
     private readonly ConvertToPdfService _convert = new();
     private readonly ContentOverlayService _overlay = new();
+    private readonly WatermarkService _watermark = new();
     private readonly ExportService _export;
     private readonly BookmarkService _bookmarks = new();
     private readonly SignatureLibraryService _signatures = new();
@@ -174,6 +175,24 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double zoom = 1.0;
     [ObservableProperty] private int renderDpi = 150;
     [ObservableProperty] private ToolMode currentTool = ToolMode.Select;
+    // Last-used tool per group, driving the split-button main-click behavior.
+    [ObservableProperty] private ToolMode currentTextTool  = ToolMode.TextStamp;
+    [ObservableProperty] private ToolMode currentShapeTool = ToolMode.Rectangle;
+
+    partial void OnCurrentToolChanged(ToolMode value)
+    {
+        // Remember which tool was last active in each group so the split button
+        // reflects the user's most recent choice.
+        if (value is ToolMode.TextStamp or ToolMode.Tick or ToolMode.Cross or ToolMode.Bullet)
+        {
+            CurrentTextTool = value;
+        }
+        else if (value is ToolMode.Ink or ToolMode.Rectangle or ToolMode.RectangleFilled
+                       or ToolMode.Ellipse or ToolMode.EllipseFilled)
+        {
+            CurrentShapeTool = value;
+        }
+    }
     [ObservableProperty] private Color currentColor = Colors.Black;
     [ObservableProperty] private double currentThickness = 3.0;
     // Last-used text-stamp font state, persisted across text-edit actions so the dialog
@@ -450,12 +469,28 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _pageOps.Reorder(_doc.Bytes!, newOrder));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Reorder pages");
             StatusText = "Pages reordered.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Reorder failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>Apply new PDF bytes with the given history label, then rebuild the page views,
+    /// while PRESERVING the unsaved overlay annotations (text stamps, ticks, notes, drawings)
+    /// that live on the PageViewModel collections. Without this, any byte-level operation
+    /// (rotate, watermark, headers, etc.) silently discards everything the user has annotated
+    /// but not yet saved. Restore is index-based: perfect for page-count-preserving ops; a
+    /// best-effort for ops that change page count/order (delete/insert/reorder — overlays on
+    /// removed pages are dropped, overlays on shifted pages may land on the wrong page).</summary>
+    private async Task ApplyBytesPreservingOverlaysAsync(byte[] newBytes, string label)
+    {
+        var overlaysSnapshot = Pages.Select(p => p.Annotations.ToList()).ToList();
+        _doc.ReplaceBytes(newBytes, label);
+        await RebuildPagesAsync();
+        for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
+            foreach (var a in overlaysSnapshot[i])
+                Pages[i].Annotations.Add(a);
     }
 
     private async Task RebuildPagesAsync()
@@ -521,7 +556,10 @@ public partial class MainViewModel : ObservableObject
                     : _doc.Bytes!;
                 return flattened;
             });
-            _doc.ReplaceBytes(bytes, markDirty: false);
+            // Save is a terminal act: the file is written to disk. Don't push it to
+            // the undo stack — Ctrl+Z can't unsave, and Save showing up as a "later
+            // edit" pollutes flows that walk the stack (e.g., watermark delete).
+            _doc.ReplaceBytes(bytes, label: "Save (flatten annotations)", markDirty: false, pushUndo: false);
             _doc.Save(path);
             foreach (var p in Pages) p.Annotations.Clear();
             await RebuildPagesAsync();
@@ -560,8 +598,7 @@ public partial class MainViewModel : ObservableObject
         if (CurrentPage is null || _doc.Bytes is null) return;
         var idx = CurrentPage.PageIndex;
         var bytes = await Task.Run(() => _pageOps.Rotate(_doc.Bytes!, idx, deg));
-        _doc.ReplaceBytes(bytes);
-        await RebuildPagesAsync();
+        await ApplyBytesPreservingOverlaysAsync(bytes, $"Rotate page {idx + 1} ({deg:+#;-#;0}°)");
         if (idx < Pages.Count) CurrentPage = Pages[idx];
         // Snap back to the top of the rotated page so it stays in view after the page size changes.
         RequestScrollIntoView(idx, 0.5, 0.05);
@@ -578,8 +615,7 @@ public partial class MainViewModel : ObservableObject
         }
         var idx = CurrentPage.PageIndex;
         var bytes = await Task.Run(() => _pageOps.DeletePages(_doc.Bytes!, new[] { idx }));
-        _doc.ReplaceBytes(bytes);
-        await RebuildPagesAsync();
+        await ApplyBytesPreservingOverlaysAsync(bytes, $"Delete page {idx + 1}");
         CurrentPage = Pages.ElementAtOrDefault(Math.Min(idx, Pages.Count - 1));
     }
 
@@ -591,8 +627,7 @@ public partial class MainViewModel : ObservableObject
         if (dlg.ShowDialog() != true) return;
         var at = CurrentPage.PageIndex + 1;
         var bytes = await Task.Run(() => _pageOps.InsertPagesFromFile(_doc.Bytes!, dlg.FileName, at));
-        _doc.ReplaceBytes(bytes);
-        await RebuildPagesAsync();
+        await ApplyBytesPreservingOverlaysAsync(bytes, $"Insert pages from {System.IO.Path.GetFileName(dlg.FileName)}");
         CurrentPage = Pages.ElementAtOrDefault(at);
     }
 
@@ -666,8 +701,7 @@ public partial class MainViewModel : ObservableObject
             // Then reorder the remaining
             if (res.NewOrder != null && res.NewOrder.Count > 0)
                 bytes = await Task.Run(() => _pageOps.Reorder(bytes, res.NewOrder));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Organise pages");
             StatusText = "Pages reorganised.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Organise pages failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -706,8 +740,7 @@ public partial class MainViewModel : ObservableObject
             IsBusy = true;
             StatusText = "Converting edited document back to PDF...";
             var newPdf = await _word.DocxToPdfBytesAsync(tempDocx);
-            _doc.ReplaceBytes(newPdf, markDirty: true);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(newPdf, "Edit in Word (import)");
             StatusText = "Edits imported. Use File → Save to persist.";
         }
         catch (Exception ex)
@@ -1184,13 +1217,44 @@ public partial class MainViewModel : ObservableObject
             StatusText = "Undo (annotation).";
             return;
         }
+        // Snapshot overlays so Undo doesn't silently discard unsaved annotations.
+        var overlaysSnapshot = Pages.Select(p => p.Annotations.ToList()).ToList();
         if (!_doc.Undo()) return;
         await RebuildPagesAsync();
+        for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
+            foreach (var a in overlaysSnapshot[i])
+                Pages[i].Annotations.Add(a);
         StatusText = "Undo.";
         UndoCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanUndo() => HasDocument && (_doc.CanUndo || _annotationUndos.Count > 0);
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task ShowHistory()
+    {
+        var idx = Controls.HistoryDialog.Show(_doc.History);
+        if (idx < 0) return;
+        try
+        {
+            IsBusy = true;
+            var overlaysSnapshot = Pages.Select(p => p.Annotations.ToList()).ToList();
+            if (_doc.RevertToBefore(idx))
+            {
+                await RebuildPagesAsync();
+                for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
+                    foreach (var a in overlaysSnapshot[i])
+                        Pages[i].Annotations.Add(a);
+                StatusText = $"Reverted {idx + 1} edit(s).";
+                UndoCommand.NotifyCanExecuteChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "History revert failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { IsBusy = false; }
+    }
 
     [RelayCommand]
     private void PickColour()
@@ -1290,8 +1354,7 @@ public partial class MainViewModel : ObservableObject
             IsBusy = true;
             var bytes = await Task.Run(() => _security.Protect(_doc.Bytes!, s.UserPassword, s.OwnerPassword,
                 s.PermitPrint, s.PermitCopy, s.PermitAnnotations, s.PermitModify));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Password protect");
             StatusText = "Security applied. Save to persist.";
         }
         catch (Exception ex)
@@ -1309,8 +1372,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _security.RemoveProtection(_doc.Bytes!));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Remove protection");
             StatusText = "Security removed. Save to persist.";
         }
         catch (Exception ex)
@@ -1332,8 +1394,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _pageOps.CropAllPages(_doc.Bytes!, r.LeftPt, r.RightPt, r.TopPt, r.BottomPt));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Crop all pages");
             StatusText = "Pages cropped.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Crop failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -1375,8 +1436,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _annotate.Flatten(_doc.Bytes!, annos));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, $"Redact {annos.Count} search hit(s)");
             SearchResults.Clear();
             StatusText = $"Redacted {annos.Count} hit(s).";
         }
@@ -1411,8 +1471,7 @@ public partial class MainViewModel : ObservableObject
             if (values is null || values.Count == 0) return;
             IsBusy = true;
             var bytes = await Task.Run(() => _forms.SetFieldValues(_doc.Bytes!, values));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, $"Fill {values.Count} form field(s)");
             StatusText = $"Filled {values.Count} field(s). Save to persist.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Fill form failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -1494,8 +1553,7 @@ public partial class MainViewModel : ObservableObject
             IsBusy = true;
             var idx = CurrentPage.PageIndex;
             var bytes = await Task.Run(() => _overlay.InsertImage(_doc.Bytes!, idx, place.ImagePath, place.XNorm, place.YNorm, place.WidthNorm, place.HeightNorm));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, $"Insert image on page {idx + 1}");
             if (idx < Pages.Count) CurrentPage = Pages[idx];
             StatusText = "Signature placed. Save to persist.";
         }
@@ -1611,18 +1669,100 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private async Task AddWatermark()
+    private async Task Watermark()
     {
         if (_doc.Bytes is null) return;
-        var r = Controls.WatermarkDialog.Show();
-        if (r is null) return;
+        var existing = _watermark.List(_doc.Bytes);
+        // A watermark is "cleanly removable" whenever its add entry is still
+        // somewhere in the undo stack — we can rewind to before it (losing any
+        // edits made afterwards, which the confirm dialog names explicitly).
+        // After save+reopen the undo stack is empty → "baked in".
+        int IndexOfWatermarkAdd(WatermarkRecord rec)
+        {
+            var target = $"Watermark added: \"{rec.Text}\"";
+            for (int i = 0; i < _doc.History.Count; i++)
+                if (_doc.History[i].Label == target) return i;
+            return -1;
+        }
+        bool CanClean(WatermarkRecord rec) => IndexOfWatermarkAdd(rec) >= 0;
+        var r = Controls.WatermarkManagerDialog.Show(existing, CanClean);
+        if (r.Kind == Controls.WatermarkManagerDialog.ActionKind.None) return;
         try
         {
             IsBusy = true;
-            var bytes = await Task.Run(() => _overlay.AddWatermark(_doc.Bytes!, r.Text, "Arial", r.FontSize, r.ColorHex, r.Opacity, r.Angle));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
-            StatusText = "Watermark added.";
+            byte[] bytes; string label;
+            if (r.Kind == Controls.WatermarkManagerDialog.ActionKind.Add && r.ToAdd is not null)
+            {
+                var rec = r.ToAdd;
+                bytes = await Task.Run(() => _watermark.Apply(_doc.Bytes!, rec));
+                label = $"Watermark added: \"{rec.Text}\"";
+            }
+            else if (r.Kind == Controls.WatermarkManagerDialog.ActionKind.Delete && r.IdToDelete is not null)
+            {
+                var toDelete = existing.FirstOrDefault(x => x.Id == r.IdToDelete);
+                var text = toDelete?.Text ?? r.IdToDelete;
+
+                if (toDelete is null)
+                {
+                    IsBusy = false;
+                    return;
+                }
+
+                var wmIndex = IndexOfWatermarkAdd(toDelete);
+                if (wmIndex < 0)
+                {
+                    IsBusy = false;
+                    MessageBox.Show(
+                        "This watermark can no longer be deleted from within the app.\n\n" +
+                        "The undo history no longer contains its add entry (the document was saved " +
+                        "and reopened, or the entry aged out of the 20-step undo cap). Start again " +
+                        "from a clean source PDF if you need to change it.",
+                        "Watermark", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // wmIndex tells us how many operations happened AFTER the watermark
+                // was added (0 = watermark is the most recent op, N = N later edits).
+                var laterCount = wmIndex;
+                string prompt;
+                if (laterCount == 0)
+                {
+                    prompt = $"Remove watermark \"{text}\"?\n\nThe pre-watermark bytes are restored " +
+                             "from the undo stack, so the background is preserved exactly. You can " +
+                             "Ctrl+Z afterward to bring the watermark back.";
+                }
+                else
+                {
+                    var laterLabels = string.Join("\n  • ",
+                        _doc.History.Take(laterCount + 1).Take(laterCount).Select(h => h.Label));
+                    prompt = $"Remove watermark \"{text}\"?\n\n" +
+                             $"WARNING: {laterCount} edit(s) were made after this watermark and will " +
+                             "also be undone:\n\n  • " + laterLabels + "\n\n" +
+                             "You'll need to re-apply them manually if you still want them. Overlay " +
+                             "annotations (text stamps, ticks, notes, drawings) are preserved.";
+                }
+                var confirm = MessageBox.Show(prompt, "Remove watermark",
+                    MessageBoxButton.OKCancel,
+                    laterCount == 0 ? MessageBoxImage.Question : MessageBoxImage.Warning);
+                if (confirm != MessageBoxResult.OK) { IsBusy = false; return; }
+
+                // Snapshot overlays so they survive the rewind + RebuildPagesAsync.
+                var overlaysSnapshot = Pages.Select(p => p.Annotations.ToList()).ToList();
+                _doc.RevertToBefore(wmIndex);
+                await RebuildPagesAsync();
+                for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
+                    foreach (var a in overlaysSnapshot[i])
+                        Pages[i].Annotations.Add(a);
+
+                StatusText = $"Watermark removed: \"{text}\"" +
+                             (laterCount > 0 ? $" (and {laterCount} later edit(s) undone)." : ".");
+                UndoCommand.NotifyCanExecuteChanged();
+                return;
+            }
+            else return;
+
+            await ApplyBytesPreservingOverlaysAsync(bytes, label);
+            StatusText = label + ".";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Watermark failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { IsBusy = false; }
@@ -1639,8 +1779,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _overlay.AddHeadersFooters(_doc.Bytes!, o, fn));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Headers/footers");
             StatusText = "Headers/footers added.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Headers/footers failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -1657,8 +1796,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _overlay.AddBates(_doc.Bytes!, r.Prefix, r.StartNumber, r.Digits, "#000000", 10, r.BottomRight));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, $"Bates numbering ({r.Prefix}{r.StartNumber:D}…)");
             StatusText = "Bates numbering added.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Bates failed", MessageBoxButton.OK, MessageBoxImage.Error); }
@@ -1682,8 +1820,7 @@ public partial class MainViewModel : ObservableObject
         {
             IsBusy = true;
             var bytes = await Task.Run(() => _security.SanitizeMetadata(_doc.Bytes!));
-            _doc.ReplaceBytes(bytes);
-            await RebuildPagesAsync();
+            await ApplyBytesPreservingOverlaysAsync(bytes, "Sanitize metadata");
             StatusText = "Metadata sanitized. Save to persist.";
         }
         catch (Exception ex)
@@ -1848,7 +1985,7 @@ public partial class MainViewModel : ObservableObject
         ProtectWithPasswordCommand.NotifyCanExecuteChanged();
         RemoveProtectionCommand.NotifyCanExecuteChanged();
         SanitizeMetadataCommand.NotifyCanExecuteChanged();
-        AddWatermarkCommand.NotifyCanExecuteChanged();
+        WatermarkCommand.NotifyCanExecuteChanged();
         AddHeadersFootersCommand.NotifyCanExecuteChanged();
         AddBatesCommand.NotifyCanExecuteChanged();
         InsertImageOnCurrentCommand.NotifyCanExecuteChanged();
@@ -1869,5 +2006,6 @@ public partial class MainViewModel : ObservableObject
         SearchCommand.NotifyCanExecuteChanged();
         ClearAnnotationsOnCurrentCommand.NotifyCanExecuteChanged();
         PrintCommand.NotifyCanExecuteChanged();
+        ShowHistoryCommand.NotifyCanExecuteChanged();
     }
 }

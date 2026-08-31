@@ -14,10 +14,24 @@ public class PdfDocumentService
     public int PageCount { get; private set; }
     public bool IsDirty { get; set; }
 
-    // Undo history: byte snapshots of past states. Bounded to keep memory sane.
-    private readonly System.Collections.Generic.Stack<byte[]> _undo = new();
+    /// <summary>Public view of one operation in the undo history.</summary>
+    public record HistoryEntry(string Label, DateTime When);
+
+    /// <summary>Undo history: byte snapshots of past states with a human label.</summary>
+    private record Frame(byte[] Bytes, string Label, DateTime When);
+
+    private readonly System.Collections.Generic.Stack<Frame> _undo = new();
     private const int MaxUndo = 20;
     public bool CanUndo => _undo.Count > 0;
+
+    /// <summary>History ordered most-recent-first (index 0 = would be undone by the next Ctrl+Z).</summary>
+    public System.Collections.Generic.IReadOnlyList<HistoryEntry> History =>
+        _undo.Select(f => new HistoryEntry(f.Label, f.When)).ToList();
+
+    /// <summary>Peek at the bytes that a plain <see cref="Undo"/> would restore, without popping.
+    /// Useful for "smart delete" flows that want to check whether they can revert cleanly to a
+    /// known previous state instead of doing a destructive rewrite.</summary>
+    public byte[]? PeekLastUndoBytes() => _undo.Count > 0 ? _undo.Peek().Bytes : null;
 
     /// <summary>Held file handle that prevents other processes from modifying/deleting the file while it's open.</summary>
     private FileStream? _lock;
@@ -76,17 +90,17 @@ public class PdfDocumentService
         return PdfReader.Open(ms, PdfDocumentOpenMode.Modify);
     }
 
-    public void ReplaceBytes(byte[] newBytes, bool markDirty = true, bool pushUndo = true)
+    public void ReplaceBytes(byte[] newBytes, string label = "Edit", bool markDirty = true, bool pushUndo = true)
     {
         if (pushUndo && Bytes != null)
         {
-            _undo.Push(Bytes);
+            _undo.Push(new Frame(Bytes, label, DateTime.Now));
             // Trim old entries by popping the bottom (rebuild stack).
             if (_undo.Count > MaxUndo)
             {
                 var keep = _undo.ToArray().Take(MaxUndo).Reverse().ToArray();
                 _undo.Clear();
-                foreach (var b in keep) _undo.Push(b);
+                foreach (var f in keep) _undo.Push(f);
             }
         }
         Bytes = newBytes;
@@ -102,7 +116,19 @@ public class PdfDocumentService
         if (_undo.Count == 0) return false;
         var previous = _undo.Pop();
         // Restore without pushing again.
-        ReplaceBytes(previous, markDirty: true, pushUndo: false);
+        ReplaceBytes(previous.Bytes, label: "Undo", markDirty: true, pushUndo: false);
+        return true;
+    }
+
+    /// <summary>Undo everything from the top of the stack down to and including the entry
+    /// at <paramref name="historyIndex"/>. Effectively "revert to before this operation".</summary>
+    public bool RevertToBefore(int historyIndex)
+    {
+        if (historyIndex < 0 || historyIndex >= _undo.Count) return false;
+        for (int i = 0; i <= historyIndex; i++)
+        {
+            if (!Undo()) return false;
+        }
         return true;
     }
 

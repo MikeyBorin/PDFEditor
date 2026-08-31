@@ -29,10 +29,14 @@ public partial class MainWindow : Window
                 {
                     if (args.PropertyName == nameof(ViewModels.MainViewModel.Zoom))
                         SyncZoomCombo();
+                    if (args.PropertyName == nameof(ViewModels.MainViewModel.CurrentTextTool)
+                        || args.PropertyName == nameof(ViewModels.MainViewModel.CurrentShapeTool))
+                        RefreshGroupButtons();
                 };
             }
             ApplyToolbarVisibility();
             SyncZoomCombo();
+            RefreshGroupButtons();
         };
     }
 
@@ -197,6 +201,110 @@ public partial class MainWindow : Window
             if (elem is null) continue;
             elem.Visibility = svc.IsVisible(name) ? Visibility.Visible : Visibility.Collapsed;
         }
+    }
+
+    // ---- Tool group split-buttons (Text and Shape) --------------------------
+    // Each group shows the "current" tool from the group as a main button; its
+    // arrow opens a popup to pick a different one. Picking updates both the
+    // active tool and the group's remembered current.
+
+    private record ToolEntry(ToolMode Mode, string Glyph, string Label, string Tooltip);
+
+    private static readonly ToolEntry[] TextGroupTools = new[]
+    {
+        new ToolEntry(ToolMode.TextStamp, "", "Text", "Text stamp"),
+        new ToolEntry(ToolMode.Tick,      "✓", "Tickmark", "Insert ✓ (checkbox tick)"),
+        new ToolEntry(ToolMode.Cross,     "✗", "Crossmark", "Insert ✗ (checkbox cross)"),
+        new ToolEntry(ToolMode.Bullet,    "•", "Bullet", "Insert • (bullet)"),
+    };
+
+    private static readonly ToolEntry[] ShapeGroupTools = new[]
+    {
+        new ToolEntry(ToolMode.Ink,             "", "Draw",   "Freehand draw"),
+        new ToolEntry(ToolMode.Rectangle,       "", "Rect",   "Rectangle (outlined)"),
+        new ToolEntry(ToolMode.RectangleFilled, "", "Rect ●", "Rectangle (filled)"),
+        new ToolEntry(ToolMode.Ellipse,         "", "Oval",   "Oval (outlined)"),
+        new ToolEntry(ToolMode.EllipseFilled,   "", "Oval ●", "Oval (filled)"),
+    };
+
+    private void RefreshGroupButtons()
+    {
+        RefreshGroupButton(TextGroupTools, VM.CurrentTextTool,
+            FindName("TB_TextGroup_Glyph") as TextBlock,
+            FindName("TB_TextGroup_Label") as TextBlock,
+            FindName("TB_TextGroup_Main") as Button);
+        RefreshGroupButton(ShapeGroupTools, VM.CurrentShapeTool,
+            FindName("TB_ShapeGroup_Glyph") as TextBlock,
+            FindName("TB_ShapeGroup_Label") as TextBlock,
+            FindName("TB_ShapeGroup_Main") as Button);
+    }
+
+    private static readonly System.Windows.Media.FontFamily Mdl2Font = new("Segoe MDL2 Assets");
+    private static readonly System.Windows.Media.FontFamily UnicodeSymbolFont = new("Segoe UI Symbol, Segoe UI, Arial");
+
+    private static void RefreshGroupButton(ToolEntry[] group, ToolMode current, TextBlock? glyphTb, TextBlock? labelTb, Button? mainBtn)
+    {
+        var e = System.Array.Find(group, x => x.Mode == current) ?? group[0];
+        if (glyphTb != null)
+        {
+            glyphTb.Text = e.Glyph;
+            // MDL2 has "notdef" boxes for regular Unicode chars, which prevents fallback.
+            // Pick the right font per-glyph based on the code point range.
+            var isMdl2 = e.Glyph.Length > 0 && e.Glyph[0] >= 0xE000 && e.Glyph[0] <= 0xF8FF;
+            glyphTb.FontFamily = isMdl2 ? Mdl2Font : UnicodeSymbolFont;
+        }
+        if (labelTb != null) labelTb.Text = e.Label;
+        if (mainBtn != null) mainBtn.ToolTip = e.Tooltip;
+    }
+
+    private void TextGroup_ShowMenu(object sender, RoutedEventArgs e)  => ShowGroupMenu(sender as UIElement, TextGroupTools);
+    private void ShapeGroup_ShowMenu(object sender, RoutedEventArgs e) => ShowGroupMenu(sender as UIElement, ShapeGroupTools);
+
+    private void ShowGroupMenu(UIElement? anchor, ToolEntry[] group)
+    {
+        if (anchor is null) return;
+        var menu = new System.Windows.Controls.ContextMenu
+        {
+            PlacementTarget = anchor,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false
+        };
+        foreach (var entry in group)
+        {
+            // MenuItem.Header takes a UIElement — build a two-column row so the MDL2
+            // glyph renders in the correct font next to a plain-font label.
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            // MDL2 icons (E000-F8FF PUA) render only in "Segoe MDL2 Assets"; Segoe MDL2
+            // has "notdef" boxes for regular Unicode chars (✓ ✗ •) which suppresses WPF's
+            // fallback. So pick the font per-glyph based on the code point range.
+            var isMdl2 = entry.Glyph.Length > 0 && entry.Glyph[0] >= 0xE000 && entry.Glyph[0] <= 0xF8FF;
+            row.Children.Add(new TextBlock
+            {
+                Text = entry.Glyph,
+                FontFamily = isMdl2
+                    ? new System.Windows.Media.FontFamily("Segoe MDL2 Assets")
+                    : new System.Windows.Media.FontFamily("Segoe UI Symbol, Segoe UI, Arial"),
+                FontSize = 16,
+                Width = 26,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            row.Children.Add(new TextBlock
+            {
+                Text = entry.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 6, 0)
+            });
+            var item = new System.Windows.Controls.MenuItem
+            {
+                Header = row,
+                Tag = entry.Mode,
+                ToolTip = entry.Tooltip
+            };
+            item.Click += (_, _) => { VM.CurrentTool = entry.Mode; };
+            menu.Items.Add(item);
+        }
+        menu.IsOpen = true;
     }
 
     private void SearchResults_DoubleClick(object sender, MouseButtonEventArgs e) => JumpToSelectedHit(sender);

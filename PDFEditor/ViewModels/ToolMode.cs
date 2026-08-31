@@ -16,5 +16,6 @@ public enum ToolMode
     Tick,
     Cross,
     RectangleFilled,
-    EllipseFilled
+    EllipseFilled,
+    Bullet
 }

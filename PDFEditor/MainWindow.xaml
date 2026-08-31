@@ -71,6 +71,7 @@
             </MenuItem>
             <MenuItem Header="_Edit">
                 <MenuItem Header="_Undo" Command="{Binding UndoCommand}" InputGestureText="Ctrl+Z"/>
+                <MenuItem Header="Edit _History..." Command="{Binding ShowHistoryCommand}" ToolTip="View or roll back the session's edit history"/>
                 <MenuItem Header="_Edit Selected Annotation..." Command="{Binding EditSelectedAnnotationCommand}" InputGestureText="F2 / Enter"/>
                 <MenuItem Header="_Delete Selected Annotation" Command="{Binding DeleteSelectedAnnotationCommand}" InputGestureText="Delete"/>
             </MenuItem>
@@ -92,7 +93,7 @@
                 <Separator/>
                 <MenuItem Header="_Translate..." Command="{Binding TranslateCommand}" ToolTip="Translate extracted text via MyMemory (free public API, no signup)"/>
                 <Separator/>
-                <MenuItem Header="Add _Watermark..." Command="{Binding AddWatermarkCommand}"/>
+                <MenuItem Header="_Watermark..." Command="{Binding WatermarkCommand}" ToolTip="Add a new watermark, or list/remove ones previously added by this app"/>
                 <MenuItem Header="Add _Headers &amp; Footers..." Command="{Binding AddHeadersFootersCommand}"/>
                 <MenuItem Header="Add _Bates Numbering..." Command="{Binding AddBatesCommand}"/>
                 <MenuItem Header="Insert Image on Current Page..." Command="{Binding InsertImageOnCurrentCommand}"/>
@@ -171,29 +172,32 @@
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_StickyNote" Command="{Binding SetToolCommand}" CommandParameter="StickyNote" ToolTip="Sticky Note">
                         <StackPanel><TextBlock Text="&#xE734;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Note" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_TextStamp" Command="{Binding SetToolCommand}" CommandParameter="TextStamp" ToolTip="Text">
-                        <StackPanel><TextBlock Text="&#xE8D2;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Text" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    <!-- Text-tool group: Text / Tick / X / Bullet. Click opens picker.
+                         CommandParameter binds to the group's current tool so the
+                         ToolToggleButton style highlights the button when it's active. -->
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_TextGroup"
+                            CommandParameter="{Binding CurrentTextTool}"
+                            Click="TextGroup_ShowMenu" ToolTip="Text tools (Text · Tickmark · Crossmark · Bullet)">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TB_TextGroup_Glyph" Text="&#xE8D2;" Style="{StaticResource ToolGlyph}"/>
+                                <TextBlock Text=" ▾" FontSize="10" VerticalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TB_TextGroup_Label" Text="Text" Style="{StaticResource ToolLabel}"/>
+                        </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Tick" Command="{Binding SetToolCommand}" CommandParameter="Tick" ToolTip="Insert &#x2713; (checkbox tick)">
-                        <StackPanel><TextBlock Text="&#x2713;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Tick" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Cross" Command="{Binding SetToolCommand}" CommandParameter="Cross" ToolTip="Insert &#x2717; (checkbox cross)">
-                        <StackPanel><TextBlock Text="&#x2717;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="X" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ink" Command="{Binding SetToolCommand}" CommandParameter="Ink" ToolTip="Freehand Draw">
-                        <StackPanel><TextBlock Text="&#xEE56;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Draw" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Rectangle" Command="{Binding SetToolCommand}" CommandParameter="Rectangle" ToolTip="Rectangle (outlined)">
-                        <StackPanel><TextBlock Text="&#xE003;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Rect" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_RectangleFilled" Command="{Binding SetToolCommand}" CommandParameter="RectangleFilled" ToolTip="Rectangle filled with current colour">
-                        <StackPanel><TextBlock Text="&#xE15C;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Rect ●" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Ellipse" Command="{Binding SetToolCommand}" CommandParameter="Ellipse" ToolTip="Oval (outlined)">
-                        <StackPanel><TextBlock Text="&#xEA3B;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Oval" Style="{StaticResource ToolLabel}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_EllipseFilled" Command="{Binding SetToolCommand}" CommandParameter="EllipseFilled" ToolTip="Oval filled with current colour">
-                        <StackPanel><TextBlock Text="&#xEB4C;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Oval ●" Style="{StaticResource ToolLabel}"/></StackPanel>
+
+                    <!-- Shape-tool group: Draw / Rect / Rect filled / Oval / Oval filled. -->
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_ShapeGroup"
+                            CommandParameter="{Binding CurrentShapeTool}"
+                            Click="ShapeGroup_ShowMenu" ToolTip="Shape tools (Draw · Rect · Oval, outlined or filled)">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TB_ShapeGroup_Glyph" Text="&#xE003;" Style="{StaticResource ToolGlyph}"/>
+                                <TextBlock Text=" ▾" FontSize="10" VerticalAlignment="Center" Opacity="0.7"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TB_ShapeGroup_Label" Text="Rect" Style="{StaticResource ToolLabel}"/>
+                        </StackPanel>
                     </Button>
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Whiteout" Command="{Binding SetToolCommand}" CommandParameter="Whiteout" ToolTip="Whiteout — cover with a white box">
                         <StackPanel><TextBlock Text="&#xE711;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="White" Style="{StaticResource ToolLabel}"/></StackPanel>
