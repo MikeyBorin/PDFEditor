@@ -13,6 +13,10 @@ public partial class PageViewModel : ObservableObject
     [ObservableProperty] private BitmapSource? thumbnail;
     [ObservableProperty] private double pixelWidth;
     [ObservableProperty] private double pixelHeight;
+    // True PDF page dimensions in points (1/72 inch). Used to compute
+    // display size at Actual Size / Custom % / fit modes.
+    [ObservableProperty] private double widthPt;
+    [ObservableProperty] private double heightPt;
     [ObservableProperty] private bool isSelected;
 
     public ObservableCollection<PdfAnnotation> Annotations { get; } = new();

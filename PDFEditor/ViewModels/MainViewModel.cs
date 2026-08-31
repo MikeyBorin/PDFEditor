@@ -39,6 +39,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string translateTargetLang = "fr";
     public ToolbarSettingsService ToolbarSettings { get; } = new();
     public ThemeService Theme { get; } = new();
+    public ViewSettingsService ViewSettings { get; } = new();
 
     [RelayCommand]
     private void SetTheme(string themeName)
@@ -172,8 +173,27 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string statusText = "Ready. Open a PDF to begin.";
     [ObservableProperty] private string title = "ArtiMax PDF Editor";
     [ObservableProperty] private bool isBusy;
+    // Custom-mode multiplier: 1.0 == 100% Actual Size. Only affects the page
+    // display when ZoomMode == Custom (percentage picked from the toolbar).
     [ObservableProperty] private double zoom = 1.0;
+    // Which fit-strategy is currently active. Persisted per-user.
+    [ObservableProperty] private ZoomMode zoomMode = ZoomMode.FitWidth;
     [ObservableProperty] private int renderDpi = 150;
+
+    partial void OnZoomModeChanged(ZoomMode value)
+    {
+        ViewSettings.Settings.ZoomMode = value;
+        ViewSettings.Save();
+    }
+
+    partial void OnZoomChanged(double value)
+    {
+        if (ZoomMode == ZoomMode.Custom)
+        {
+            ViewSettings.Settings.CustomZoom = value;
+            ViewSettings.Save();
+        }
+    }
     [ObservableProperty] private ToolMode currentTool = ToolMode.Select;
     // Last-used tool per group, driving the split-button main-click behavior.
     [ObservableProperty] private ToolMode currentTextTool  = ToolMode.TextStamp;
@@ -318,6 +338,10 @@ public partial class MainViewModel : ObservableObject
         };
         _recents.Changed += RefreshRecents;
         RefreshRecents();
+        // Restore persisted view preference. Set backing fields directly so the
+        // OnZoomModeChanged / OnZoomChanged partials don't fire a redundant Save.
+        zoomMode = ViewSettings.Settings.ZoomMode;
+        zoom = ViewSettings.Settings.CustomZoom;
     }
 
     private void RefreshRecents()
@@ -582,6 +606,11 @@ public partial class MainViewModel : ObservableObject
                     pvm.Thumbnail = thumb;
                     pvm.PixelWidth = img.PixelWidth;
                     pvm.PixelHeight = img.PixelHeight;
+                    // Derive point dimensions from the bitmap — this already
+                    // reflects PDFium's rotation handling, so we don't need to
+                    // separately read PdfSharpCore's Rotate key.
+                    pvm.WidthPt  = img.PixelWidth  * 72.0 / RenderDpi;
+                    pvm.HeightPt = img.PixelHeight * 72.0 / RenderDpi;
                     if (idx == 0) CurrentPage = pvm;
                 });
             }
@@ -1144,13 +1173,38 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ZoomIn() { Zoom = Math.Min(Zoom * 1.25, 6.0); }
+    private void ZoomIn()
+    {
+        // Bumping into Custom from a fit-mode: jump to 125% relative to actual
+        // size. Predictable and matches "one press bigger than 100%".
+        if (ZoomMode != ZoomMode.Custom) { ZoomMode = ZoomMode.Custom; Zoom = 1.25; return; }
+        Zoom = Math.Min(Zoom * 1.25, 6.0);
+    }
 
     [RelayCommand]
-    private void ZoomOut() { Zoom = Math.Max(Zoom / 1.25, 0.25); }
+    private void ZoomOut()
+    {
+        if (ZoomMode != ZoomMode.Custom) { ZoomMode = ZoomMode.Custom; Zoom = 0.8; return; }
+        Zoom = Math.Max(Zoom / 1.25, 0.25);
+    }
 
     [RelayCommand]
-    private void ZoomReset() { Zoom = 1.0; }
+    private void ZoomReset() { ZoomMode = ZoomMode.ActualSize; Zoom = 1.0; }
+
+    /// <summary>Set the fit-mode (or a specific % via ZoomMode.Custom).
+    /// When switching to Custom, pass the desired percentage as a double
+    /// (e.g. 1.5 for 150%) via <see cref="SetZoomPercent"/> instead.</summary>
+    [RelayCommand]
+    private void SetZoomMode(ZoomMode mode) => ZoomMode = mode;
+
+    /// <summary>Switch to Custom mode at the given percentage (1.0 = 100%).</summary>
+    [RelayCommand]
+    private void SetZoomPercent(double percent)
+    {
+        if (percent <= 0) return;
+        ZoomMode = ZoomMode.Custom;
+        Zoom = Math.Clamp(percent, 0.05, 16.0);
+    }
 
     public void HandleRegionSelection(int pageIndex, double nx, double ny, double nw, double nh, ToolMode tool)
     {
@@ -1795,6 +1849,64 @@ public partial class MainViewModel : ObservableObject
                 var rec = r.ToAdd;
                 bytes = await Task.Run(() => _watermark.Apply(_doc.Bytes!, rec));
                 label = $"Watermark added: \"{rec.Text}\"";
+            }
+            else if (r.Kind == Controls.WatermarkManagerDialog.ActionKind.Edit
+                     && r.ToAdd is not null && r.OriginalIdForEdit is not null)
+            {
+                // Edit = rewind past the original watermark's Add, then re-apply
+                // with the new record on top. Reuses the Delete rewind machinery.
+                var original = existing.FirstOrDefault(x => x.Id == r.OriginalIdForEdit);
+                if (original is null) { IsBusy = false; return; }
+                var wmIdx = IndexOfWatermarkAdd(original);
+                if (wmIdx < 0)
+                {
+                    IsBusy = false;
+                    MessageBox.Show(
+                        "This watermark can no longer be edited from within the app.\n\n" +
+                        "The undo history no longer contains its add entry. Start again from " +
+                        "a clean source PDF if you need to change it.",
+                        "Watermark", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                var laterCount = wmIdx;
+                string prompt;
+                if (laterCount == 0)
+                {
+                    prompt = $"Replace watermark \"{original.Text}\" with the new settings?\n\n" +
+                             "The pre-watermark bytes are restored from the undo stack (background " +
+                             "preserved exactly), then the new watermark is applied on top. Ctrl+Z " +
+                             "will reverse the change.";
+                }
+                else
+                {
+                    var laterLabels = string.Join("\n  • ",
+                        _doc.History.Take(laterCount + 1).Take(laterCount).Select(h => h.Label));
+                    prompt = $"Replace watermark \"{original.Text}\" with the new settings?\n\n" +
+                             $"WARNING: {laterCount} edit(s) were made after this watermark and will " +
+                             "also be undone before the replacement is applied:\n\n  • " + laterLabels +
+                             "\n\nYou'll need to re-apply them manually if you still want them. " +
+                             "Overlay annotations (text stamps, ticks, notes, drawings) are preserved.";
+                }
+                var confirm = MessageBox.Show(prompt, "Edit watermark",
+                    MessageBoxButton.OKCancel,
+                    laterCount == 0 ? MessageBoxImage.Question : MessageBoxImage.Warning);
+                if (confirm != MessageBoxResult.OK) { IsBusy = false; return; }
+
+                var overlaysSnapshot = Pages.Select(p => p.Annotations.ToList()).ToList();
+                _doc.RevertToBefore(wmIdx);
+                await RebuildPagesAsync();
+                for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
+                    foreach (var a in overlaysSnapshot[i])
+                        Pages[i].Annotations.Add(a);
+
+                var newRec = r.ToAdd;
+                var newBytes = await Task.Run(() => _watermark.Apply(_doc.Bytes!, newRec));
+                var editLabel = $"Watermark added: \"{newRec.Text}\"";
+                await ApplyBytesPreservingOverlaysAsync(newBytes, editLabel);
+                StatusText = $"Watermark edited: \"{original.Text}\" → \"{newRec.Text}\"" +
+                             (laterCount > 0 ? $" ({laterCount} later edit(s) undone)." : ".");
+                UndoCommand.NotifyCanExecuteChanged();
+                return;
             }
             else if (r.Kind == Controls.WatermarkManagerDialog.ActionKind.Delete && r.IdToDelete is not null)
             {

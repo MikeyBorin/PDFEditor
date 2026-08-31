@@ -27,7 +27,8 @@ public partial class MainWindow : Window
                 };
                 vm.PropertyChanged += (_, args) =>
                 {
-                    if (args.PropertyName == nameof(ViewModels.MainViewModel.Zoom))
+                    if (args.PropertyName == nameof(ViewModels.MainViewModel.Zoom)
+                        || args.PropertyName == nameof(ViewModels.MainViewModel.ZoomMode))
                         SyncZoomCombo();
                     if (args.PropertyName == nameof(ViewModels.MainViewModel.CurrentTextTool)
                         || args.PropertyName == nameof(ViewModels.MainViewModel.CurrentShapeTool))
@@ -40,11 +41,23 @@ public partial class MainWindow : Window
         };
     }
 
+    private bool _syncingZoomCombo;
     private void SyncZoomCombo()
     {
         var combo = FindName("TB_ZoomLevel") as ComboBox;
         if (combo is null) return;
-        combo.Text = $"{VM.Zoom * 100:0}%";
+        _syncingZoomCombo = true;
+        try
+        {
+            combo.Text = VM.ZoomMode switch
+            {
+                ViewModels.ZoomMode.FitWidth   => "Fit Width",
+                ViewModels.ZoomMode.FitPage    => "Fit Page",
+                ViewModels.ZoomMode.ActualSize => "Actual Size",
+                _ /* Custom */                  => $"{VM.Zoom * 100:0}%",
+            };
+        }
+        finally { _syncingZoomCombo = false; }
     }
 
     private void OnScrollIntoView(int pageIndex, double normX, double normY)
@@ -183,12 +196,23 @@ public partial class MainWindow : Window
     }
     private void ApplyZoomFromCombo(object sender)
     {
+        if (_syncingZoomCombo) return;
         if (sender is not ComboBox cb) return;
-        var text = (cb.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? cb.Text ?? "";
-        text = text.Replace("%", "").Trim();
-        if (double.TryParse(text, out var pct) && pct >= 10 && pct <= 800)
+        var text = ((cb.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? cb.Text ?? "").Trim();
+
+        // Match a named fit-mode first (case-insensitive, ignores whitespace).
+        var collapsed = text.Replace(" ", "").ToLowerInvariant();
+        switch (collapsed)
         {
-            VM.Zoom = pct / 100.0;
+            case "fitwidth":   VM.ZoomMode = ViewModels.ZoomMode.FitWidth;   return;
+            case "fitpage":    VM.ZoomMode = ViewModels.ZoomMode.FitPage;    return;
+            case "actualsize": VM.ZoomMode = ViewModels.ZoomMode.ActualSize; return;
+        }
+        // Otherwise treat as a percentage.
+        var num = text.Replace("%", "").Trim();
+        if (double.TryParse(num, out var pct) && pct >= 5 && pct <= 1600)
+        {
+            VM.SetZoomPercentCommand.Execute(pct / 100.0);
         }
     }
 

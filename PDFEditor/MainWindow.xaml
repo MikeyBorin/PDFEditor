@@ -115,6 +115,19 @@
                 <MenuItem Header="Zoom Out" Command="{Binding ZoomOutCommand}" InputGestureText="Ctrl+-"/>
                 <MenuItem Header="Reset Zoom" Command="{Binding ZoomResetCommand}" InputGestureText="Ctrl+0"/>
                 <Separator/>
+                <MenuItem Header="Fit _Width"
+                          IsCheckable="True"
+                          IsChecked="{Binding ZoomMode, Converter={StaticResource EnumEquals}, ConverterParameter=FitWidth, Mode=OneWay}"
+                          Command="{Binding SetZoomModeCommand}" CommandParameter="{x:Static vm:ZoomMode.FitWidth}"/>
+                <MenuItem Header="Fit _Page"
+                          IsCheckable="True"
+                          IsChecked="{Binding ZoomMode, Converter={StaticResource EnumEquals}, ConverterParameter=FitPage, Mode=OneWay}"
+                          Command="{Binding SetZoomModeCommand}" CommandParameter="{x:Static vm:ZoomMode.FitPage}"/>
+                <MenuItem Header="_Actual Size"
+                          IsCheckable="True"
+                          IsChecked="{Binding ZoomMode, Converter={StaticResource EnumEquals}, ConverterParameter=ActualSize, Mode=OneWay}"
+                          Command="{Binding SetZoomModeCommand}" CommandParameter="{x:Static vm:ZoomMode.ActualSize}"/>
+                <Separator/>
                 <MenuItem Header="_Customise Toolbar..." Command="{Binding CustomiseToolbarCommand}"/>
                 <Separator/>
                 <MenuItem Header="_Theme">
@@ -259,8 +272,11 @@
                     <Button Style="{StaticResource ToolButton}" x:Name="TB_ZoomOut" Command="{Binding ZoomOutCommand}" ToolTip="Zoom out (Ctrl+-)">
                         <StackPanel><TextBlock Text="&#xE71F;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Zoom −" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
-                    <ComboBox x:Name="TB_ZoomLevel" Width="80" Margin="4,0" IsEditable="True" VerticalAlignment="Center"
+                    <ComboBox x:Name="TB_ZoomLevel" Width="110" Margin="4,0" IsEditable="True" VerticalAlignment="Center"
                               LostFocus="ZoomCombo_LostFocus" SelectionChanged="ZoomCombo_SelectionChanged" KeyDown="ZoomCombo_KeyDown">
+                        <ComboBoxItem>Fit Width</ComboBoxItem>
+                        <ComboBoxItem>Fit Page</ComboBoxItem>
+                        <ComboBoxItem>Actual Size</ComboBoxItem>
                         <ComboBoxItem>25%</ComboBoxItem>
                         <ComboBoxItem>50%</ComboBoxItem>
                         <ComboBoxItem>75%</ComboBoxItem>
@@ -382,11 +398,25 @@
                         <DataTemplate>
                             <Viewbox Stretch="Uniform" StretchDirection="Both" Margin="12">
                                 <Viewbox.MaxWidth>
-                                    <MultiBinding Converter="{StaticResource ZoomWidth}" ConverterParameter="60">
-                                        <Binding Path="ActualWidth" ElementName="PagesScroller"/>
-                                        <Binding Path="DataContext.Zoom" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    <MultiBinding Converter="{StaticResource ZoomWidth}" ConverterParameter="24">
+                                        <Binding Path="ActualWidth"  ElementName="PagesScroller"/>
+                                        <Binding Path="ActualHeight" ElementName="PagesScroller"/>
+                                        <Binding Path="DataContext.ZoomMode" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        <Binding Path="DataContext.Zoom"     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        <Binding Path="WidthPt"/>
+                                        <Binding Path="HeightPt"/>
                                     </MultiBinding>
                                 </Viewbox.MaxWidth>
+                                <Viewbox.MaxHeight>
+                                    <MultiBinding Converter="{StaticResource ZoomHeight}" ConverterParameter="24">
+                                        <Binding Path="ActualWidth"  ElementName="PagesScroller"/>
+                                        <Binding Path="ActualHeight" ElementName="PagesScroller"/>
+                                        <Binding Path="DataContext.ZoomMode" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        <Binding Path="DataContext.Zoom"     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        <Binding Path="WidthPt"/>
+                                        <Binding Path="HeightPt"/>
+                                    </MultiBinding>
+                                </Viewbox.MaxHeight>
                                 <Border BorderBrush="#111" BorderThickness="1"
                                         Background="White" SnapsToDevicePixels="True"
                                         Width="{Binding PixelWidth}" Height="{Binding PixelHeight}">

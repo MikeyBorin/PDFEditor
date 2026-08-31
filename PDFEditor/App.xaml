@@ -9,6 +9,8 @@
             <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
             <ctrl:InsetConverter x:Key="InsetConverter" Inset="60" />
             <ctrl:ZoomWidthConverter x:Key="ZoomWidth" />
+            <ctrl:ZoomHeightConverter x:Key="ZoomHeight" />
+            <ctrl:EnumEqualsConverter x:Key="EnumEquals" />
             <ctrl:ContrastBorderConverter x:Key="ContrastBorder" />
             <ctrl:ColorToBrushConverter x:Key="ColorToBrush" />
             <ctrl:OneBasedIndexConverter x:Key="OneBasedIndex" />

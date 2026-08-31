@@ -608,7 +608,7 @@ public class AnnotationLayer : Canvas
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align
                     };
-                    Page.Annotations.Add(note);
+                    AddAnnotationWithUndo(note);
                     MainVM.RememberFontChoice(r);
                     MainVM.SelectedAnnotation = note;
                     MainVM.CurrentTool = ToolMode.Select;
@@ -646,7 +646,7 @@ public class AnnotationLayer : Canvas
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align
                     };
-                    Page.Annotations.Add(stamp);
+                    AddAnnotationWithUndo(stamp);
                     MainVM.RememberFontChoice(r);
                     // One-shot tool: revert to Select so the next click drags/edits the stamp
                     // instead of dropping another one.
@@ -700,7 +700,7 @@ public class AnnotationLayer : Canvas
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align
                     };
-                    Page.Annotations.Add(callout);
+                    AddAnnotationWithUndo(callout);
                     MainVM.RememberFontChoice(r);
                     MainVM.SelectedAnnotation = callout;
                     MainVM.CurrentTool = ToolMode.Select;
@@ -729,7 +729,7 @@ public class AnnotationLayer : Canvas
                 Color = MainVM.CurrentColor, Text = glyph,
                 FontFamily = "Segoe UI Symbol", FontSize = 18, Bold = true
             };
-            Page.Annotations.Add(mark);
+            AddAnnotationWithUndo(mark);
             // Tool stays armed — clicking again drops another mark. Use the Select
             // tool if you want to drag/resize/edit an existing one.
             return;
@@ -884,7 +884,7 @@ public class AnnotationLayer : Canvas
             return;
         }
 
-        if (ok) Page!.Annotations.Add(_drafting);
+        if (ok) AddAnnotationWithUndo(_drafting);
         else Rebuild();
 
         _drafting = null;
@@ -894,6 +894,23 @@ public class AnnotationLayer : Canvas
     {
         if (MainVM is null) return;
         MainVM.HandleRegionSelection(pageIndex, region.X, region.Y, region.W, region.H, tool);
+    }
+
+    /// <summary>Add an annotation to the current page and register an undo that
+    /// removes it. Use this instead of Page.Annotations.Add(...) so Ctrl+Z reverses
+    /// new annotations (Whiteout, Rectangle, Ellipse, Ink, Highlight, Text stamps,
+    /// Sticky notes, Callouts, Marks — everything).</summary>
+    private void AddAnnotationWithUndo(PdfAnnotation a)
+    {
+        if (Page is null) return;
+        var page = Page;
+        var vm = MainVM;
+        page.Annotations.Add(a);
+        vm?.PushAnnotationUndo(() =>
+        {
+            page.Annotations.Remove(a);
+            if (vm.SelectedAnnotation == a) vm.SelectedAnnotation = null;
+        });
     }
 
     private void AddResizeHandle(PdfAnnotation a, string handle, double left, double top, Cursor cursor)
