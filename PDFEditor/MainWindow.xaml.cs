@@ -216,6 +216,7 @@ public partial class MainWindow : Window
         new ToolEntry(ToolMode.Tick,      "✓", "Tickmark", "Insert ✓ (checkbox tick)"),
         new ToolEntry(ToolMode.Cross,     "✗", "Crossmark", "Insert ✗ (checkbox cross)"),
         new ToolEntry(ToolMode.Bullet,    "•", "Bullet", "Insert • (bullet)"),
+        new ToolEntry(ToolMode.Callout,   "", "Callout", "Speech-bubble note with a leader arrow pointing at a spot"),
     };
 
     private static readonly ToolEntry[] ShapeGroupTools = new[]

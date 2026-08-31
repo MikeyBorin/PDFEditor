@@ -11,7 +11,10 @@ public class PdfRenderService
     public BitmapSource RenderPage(byte[] pdfBytes, int pageIndex, int dpi = 150)
     {
         using var ms = new MemoryStream();
-        var options = new RenderOptions(Dpi: dpi);
+        // Explicitly render annotations (sticky notes, links, form widgets) — the
+        // record's default is false in this build of PDFtoImage, so without this
+        // saved sticky notes are invisible after reopening the file.
+        var options = new RenderOptions(Dpi: dpi, WithAnnotations: true, WithFormFill: true);
         Conversion.SavePng(ms, pdfBytes, page: pageIndex, options: options);
         ms.Position = 0;
 

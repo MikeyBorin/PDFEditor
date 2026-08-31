@@ -21,7 +21,8 @@ public enum AnnotationKind
     TextStamp,
     Whiteout,
     Redaction,
-    Image
+    Image,
+    Callout
 }
 
 /// <summary>Coordinates are normalized 0..1 in PDF page space (origin top-left, y-down).</summary>
@@ -47,4 +48,8 @@ public class PdfAnnotation
     public List<(double X, double Y)> InkPoints { get; set; } = new();
     /// <summary>Rectangle / Ellipse only: draw as filled instead of outlined.</summary>
     public bool Filled { get; set; }
+    /// <summary>Callout only: anchor point the arrow tip points at, normalised page coords.
+    /// The X/Y/Width/Height fields hold the text-box position and size.</summary>
+    public double AnchorX { get; set; }
+    public double AnchorY { get; set; }
 }

@@ -11,6 +11,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             LogFatal("AppDomain.UnhandledException", args.ExceptionObject as Exception);
         DispatcherUnhandledException += (_, args) =>

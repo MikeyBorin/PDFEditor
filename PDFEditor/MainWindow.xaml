@@ -108,7 +108,7 @@
                     <MenuItem Header="Sanitize Metadata" Command="{Binding SanitizeMetadataCommand}"/>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="Clear Annotations (Current)" Command="{Binding ClearAnnotationsOnCurrentCommand}"/>
+                <MenuItem Header="Clear _Annotations..." Command="{Binding ClearAnnotationsCommand}" ToolTip="Remove unsaved overlay annotations on the current page or all pages; Ctrl+Z restores"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Zoom In" Command="{Binding ZoomInCommand}" InputGestureText="Ctrl++"/>

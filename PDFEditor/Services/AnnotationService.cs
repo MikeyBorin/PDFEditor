@@ -116,6 +116,89 @@ public class AnnotationService
                         }
                         break;
 
+                    case AnnotationKind.Callout:
+                        {
+                            // Save as a native PDF /FreeText annotation with callout intent —
+                            // so it survives Save + reopen as a real callout in other viewers
+                            // (Acrobat, Foxit, Chrome), and we round-trip it back to an editable
+                            // overlay on Load via the /ArtiMaxCallout marker key.
+                            var boxLeft = a.X * w;
+                            var boxTop  = a.Y * h;
+                            var boxW    = System.Math.Max(20, a.Width  * w);
+                            var boxH    = System.Math.Max(16, a.Height * h);
+                            var anchorX = a.AnchorX * w;
+                            var anchorY = a.AnchorY * h;
+
+                            // /Rect in PDF coords (bottom-left origin): [llx lly urx ury]
+                            var pageH = page.Height.Point;
+                            var llx = boxLeft;
+                            var lly = pageH - (boxTop + boxH);
+                            var urx = boxLeft + boxW;
+                            var ury = pageH - boxTop;
+
+                            // Callout line: tail = box-edge midpoint closest to anchor, head = anchor.
+                            double cx = boxLeft + boxW / 2, cy = boxTop + boxH / 2;
+                            double dx = anchorX - cx, dy = anchorY - cy;
+                            double tailX, tailY;
+                            if (System.Math.Abs(dx) * boxH > System.Math.Abs(dy) * boxW)
+                            { tailX = dx > 0 ? boxLeft + boxW : boxLeft; tailY = cy; }
+                            else
+                            { tailX = cx; tailY = dy > 0 ? boxTop + boxH : boxTop; }
+
+                            var fs = a.FontSize > 0 ? a.FontSize : 12;
+                            var inv = System.Globalization.CultureInfo.InvariantCulture;
+                            // /C on a /FreeText is interpreted by Acrobat/most viewers as the
+                            // INTERIOR fill colour, not the border/text. To match our overlay's
+                            // yellow post-it look, hard-code /C to light yellow. The user's
+                            // annotation colour goes into /DA for the text (and into /ArtiMax
+                            // custom keys so we can restore it exactly on Load).
+                            const double bgR = 1.0, bgG = 0.92, bgB = 0.51;
+                            var txR = a.Color.R / 255.0;
+                            var txG = a.Color.G / 255.0;
+                            var txB = a.Color.B / 255.0;
+
+                            var doc2 = page.Owner;
+                            var ft = new PdfSharpCore.Pdf.PdfDictionary(doc2);
+                            ft.Elements.SetName("/Type", "/Annot");
+                            ft.Elements.SetName("/Subtype", "/FreeText");
+                            ft.Elements["/Rect"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(llx), new PdfSharpCore.Pdf.PdfReal(lly),
+                                new PdfSharpCore.Pdf.PdfReal(urx), new PdfSharpCore.Pdf.PdfReal(ury));
+                            ft.Elements.SetString("/Contents", a.Text ?? "");
+                            ft.Elements.SetString("/DA",
+                                $"/Helv {fs.ToString("0.##", inv)} Tf " +
+                                $"{txR.ToString("0.##", inv)} {txG.ToString("0.##", inv)} {txB.ToString("0.##", inv)} rg");
+                            ft.Elements.SetName("/IT", "/FreeTextCallout");
+                            ft.Elements["/CL"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(tailX), new PdfSharpCore.Pdf.PdfReal(pageH - tailY),
+                                new PdfSharpCore.Pdf.PdfReal(anchorX), new PdfSharpCore.Pdf.PdfReal(pageH - anchorY));
+                            ft.Elements.SetName("/LE", "/OpenArrow");
+                            var bs = new PdfSharpCore.Pdf.PdfDictionary(doc2);
+                            bs.Elements.SetInteger("/W", 1);
+                            bs.Elements.SetName("/S", "/S");
+                            ft.Elements["/BS"] = bs;
+                            ft.Elements["/C"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(bgR), new PdfSharpCore.Pdf.PdfReal(bgG), new PdfSharpCore.Pdf.PdfReal(bgB));
+                            ft.Elements["/IC"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(bgR), new PdfSharpCore.Pdf.PdfReal(bgG), new PdfSharpCore.Pdf.PdfReal(bgB));
+                            ft.Elements.SetInteger("/F", 4); // Print flag
+                            // Our marker + preserved user colour so ExtractAndStrip... can
+                            // reify with the original colour rather than the yellow /C we wrote.
+                            ft.Elements.SetBoolean("/ArtiMaxCallout", true);
+                            ft.Elements["/ArtiMaxCalloutColor"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(txR), new PdfSharpCore.Pdf.PdfReal(txG), new PdfSharpCore.Pdf.PdfReal(txB));
+
+                            doc2.Internals.AddObject(ft);
+                            var annots = page.Elements.GetArray("/Annots");
+                            if (annots == null)
+                            {
+                                annots = new PdfSharpCore.Pdf.PdfArray(doc2);
+                                page.Elements["/Annots"] = annots;
+                            }
+                            annots.Elements.Add(ft.Reference);
+                        }
+                        break;
+
                     case AnnotationKind.TextStamp:
                         if (!string.IsNullOrEmpty(a.Text))
                         {
@@ -180,6 +263,122 @@ public class AnnotationService
         return output.ToArray();
     }
 
+    /// <summary>Extracts every native /Text sticky-note annotation from the PDF, converts
+    /// each into an editable overlay PdfAnnotation (Kind = StickyNote), and returns bytes
+    /// with those /Text (and their paired /Popup) annotations removed. Called on Load and
+    /// after Save so the round-trip is Layer 1 → native /Text on disk → Layer 1.</summary>
+    public (byte[] cleanedBytes, System.Collections.Generic.List<Models.PdfAnnotation> notes) ExtractAndStripStickyNotes(byte[] pdfBytes)
+    {
+        var notes = new System.Collections.Generic.List<Models.PdfAnnotation>();
+        using var input = new MemoryStream(pdfBytes);
+        var doc = PdfSharpCore.Pdf.IO.PdfReader.Open(input, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Modify);
+        for (int p = 0; p < doc.PageCount; p++)
+        {
+            var page = doc.Pages[p];
+            if (!page.Elements.ContainsKey("/Annots")) continue;
+            var annots = page.Elements.GetArray("/Annots");
+            if (annots == null) continue;
+            var pageW = page.Width.Point;
+            var pageH = page.Height.Point;
+
+            for (int i = annots.Elements.Count - 1; i >= 0; i--)
+            {
+                var dict = ResolveDict(annots.Elements[i]);
+                if (dict == null) continue;
+                var subtype = dict.Elements.GetName("/Subtype");
+                if (subtype == "/Text")
+                {
+                    var contents = ReadString(dict, "/Contents");
+                    var rect = dict.Elements.GetRectangle("/Rect");
+                    var normX = pageW > 0 ? rect.X1 / pageW : 0;
+                    // /Rect is (llx lly urx ury) in PDF bottom-left coords; ury is the icon top.
+                    var normY = pageH > 0 ? 1.0 - (rect.Y2 / pageH) : 0;
+                    notes.Add(new Models.PdfAnnotation
+                    {
+                        PageIndex = p,
+                        Kind = Models.AnnotationKind.StickyNote,
+                        X = System.Math.Clamp(normX, 0, 1),
+                        Y = System.Math.Clamp(normY, 0, 1),
+                        Width = 0.03,
+                        Height = 0.03,
+                        Text = contents
+                    });
+                    annots.Elements.RemoveAt(i);
+                }
+                else if (subtype == "/FreeText" && IsArtiMaxCallout(dict))
+                {
+                    // Our callout — reify as an editable overlay Callout.
+                    var contents = ReadString(dict, "/Contents");
+                    var rect = dict.Elements.GetRectangle("/Rect");
+                    // Box position in normalized top-left coords
+                    var boxX = pageW > 0 ? rect.X1 / pageW : 0;
+                    var boxY = pageH > 0 ? 1.0 - (rect.Y2 / pageH) : 0;
+                    var boxWn = pageW > 0 ? (rect.X2 - rect.X1) / pageW : 0.2;
+                    var boxHn = pageH > 0 ? (rect.Y2 - rect.Y1) / pageH : 0.06;
+
+                    // Anchor: head of the /CL callout line (last two coords), converted to top-left.
+                    double anchorX = 0, anchorY = 0;
+                    if (dict.Elements.TryGetValue("/CL", out var clItem))
+                    {
+                        var cl = clItem as PdfSharpCore.Pdf.PdfArray
+                              ?? (clItem as PdfSharpCore.Pdf.Advanced.PdfReference)?.Value as PdfSharpCore.Pdf.PdfArray;
+                        if (cl != null && cl.Elements.Count >= 4)
+                        {
+                            var hxPdf = cl.Elements.GetReal(cl.Elements.Count - 2);
+                            var hyPdf = cl.Elements.GetReal(cl.Elements.Count - 1);
+                            anchorX = pageW > 0 ? hxPdf / pageW : 0;
+                            anchorY = pageH > 0 ? 1.0 - (hyPdf / pageH) : 0;
+                        }
+                    }
+
+                    // Colour: prefer the /ArtiMaxCalloutColor marker (preserves the user's
+                    // exact original colour); fall back to /C (which we hard-code to yellow
+                    // for Acrobat compatibility, so it's not useful as a user-colour source).
+                    var callColor = System.Windows.Media.Colors.Black;
+                    var colorKey = dict.Elements.ContainsKey("/ArtiMaxCalloutColor")
+                        ? "/ArtiMaxCalloutColor" : "/C";
+                    if (dict.Elements.TryGetValue(colorKey, out var cItem))
+                    {
+                        var c = cItem as PdfSharpCore.Pdf.PdfArray
+                             ?? (cItem as PdfSharpCore.Pdf.Advanced.PdfReference)?.Value as PdfSharpCore.Pdf.PdfArray;
+                        if (c != null && c.Elements.Count >= 3)
+                        {
+                            var r = (byte)System.Math.Clamp(c.Elements.GetReal(0) * 255, 0, 255);
+                            var g = (byte)System.Math.Clamp(c.Elements.GetReal(1) * 255, 0, 255);
+                            var b = (byte)System.Math.Clamp(c.Elements.GetReal(2) * 255, 0, 255);
+                            callColor = System.Windows.Media.Color.FromRgb(r, g, b);
+                        }
+                    }
+
+                    notes.Add(new Models.PdfAnnotation
+                    {
+                        PageIndex = p,
+                        Kind = Models.AnnotationKind.Callout,
+                        X = System.Math.Clamp(boxX, 0, 1),
+                        Y = System.Math.Clamp(boxY, 0, 1),
+                        Width = System.Math.Clamp(boxWn, 0.02, 1),
+                        Height = System.Math.Clamp(boxHn, 0.02, 1),
+                        AnchorX = System.Math.Clamp(anchorX, 0, 1),
+                        AnchorY = System.Math.Clamp(anchorY, 0, 1),
+                        Text = contents,
+                        Color = callColor,
+                        StrokeThickness = 1.5
+                    });
+                    annots.Elements.RemoveAt(i);
+                }
+                else if (subtype == "/Popup")
+                {
+                    // Paired popup dictionaries — remove them too so no orphan references remain.
+                    annots.Elements.RemoveAt(i);
+                }
+            }
+            if (annots.Elements.Count == 0) page.Elements.Remove("/Annots");
+        }
+        using var output = new MemoryStream();
+        doc.Save(output, false);
+        return (output.ToArray(), notes);
+    }
+
     /// <summary>Returns true if any page has a sticky-note (/Text subtype) annotation —
     /// the only unflattened annotation kind PDF Editor writes.</summary>
     public bool HasStickyNotes(byte[] pdfBytes)
@@ -202,6 +401,27 @@ public class AnnotationService
         }
         catch { }
         return false;
+    }
+
+    private static bool IsArtiMaxCallout(PdfSharpCore.Pdf.PdfDictionary dict)
+    {
+        if (!dict.Elements.TryGetValue("/ArtiMaxCallout", out var v)) return false;
+        return v switch
+        {
+            PdfSharpCore.Pdf.PdfBoolean b => b.Value,
+            PdfSharpCore.Pdf.PdfBooleanObject bo => bo.Value,
+            _ => v?.ToString() == "true"
+        };
+    }
+
+    private static string ReadString(PdfSharpCore.Pdf.PdfDictionary dict, string key)
+    {
+        if (!dict.Elements.TryGetValue(key, out var item)) return "";
+        return item switch
+        {
+            PdfSharpCore.Pdf.PdfString s => s.Value,
+            _ => item?.ToString() ?? ""
+        };
     }
 
     private static PdfSharpCore.Pdf.PdfDictionary? ResolveDict(PdfSharpCore.Pdf.PdfItem item)

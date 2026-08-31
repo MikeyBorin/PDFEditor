@@ -115,14 +115,29 @@ public class AnnotationLayer : Canvas
                 MainVM.SelectedAnnotation = a;
                 return true;
             }
-            if (a.Kind == AnnotationKind.StickyNote)
+            if (a.Kind == AnnotationKind.StickyNote || a.Kind == AnnotationKind.Callout)
             {
-                var text = PromptDialog.Ask("Edit Note", "Note text:", a.Text ?? "");
-                if (text != null)
+                var hex = "#" + a.Color.R.ToString("X2") + a.Color.G.ToString("X2") + a.Color.B.ToString("X2");
+                var r = TextStampDialog.Show(
+                    defaultText: a.Text ?? "",
+                    defaultFont: string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily,
+                    defaultSize: a.FontSize > 0 ? a.FontSize : 12,
+                    defaultBold: a.Bold, defaultItalic: a.Italic, defaultUnderline: a.Underline,
+                    defaultColorHex: hex,
+                    defaultAlign: a.Align);
+                if (r != null)
                 {
-                    a.Text = text;
-                    Page.RaiseAnnotationChanged();
-                    MainVM.StatusText = "Note updated.";
+                    try
+                    {
+                        var c = (Color)ColorConverter.ConvertFromString(r.ColorHex);
+                        a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
+                        a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
+                        a.Align = r.Align; a.Color = c;
+                        MainVM.RememberFontChoice(r);
+                        Page.RaiseAnnotationChanged();
+                        MainVM.StatusText = a.Kind == AnnotationKind.StickyNote ? "Note updated." : "Callout updated.";
+                    }
+                    catch { }
                 }
                 MainVM.SelectedAnnotation = a;
                 return true;
@@ -251,6 +266,13 @@ public class AnnotationLayer : Canvas
             if (sel.Kind != AnnotationKind.TextStamp)
                 AddResizeHandle(sel, "S",  boxLeft + boxW / 2 - 5, boxTop + boxH - 5, Cursors.SizeNS);
             AddResizeHandle(sel, "SE", boxLeft + boxW - 5, boxTop + boxH - 5, Cursors.SizeNWSE);
+
+            // Callouts get an extra handle at the arrow tip so it can be moved
+            // independently of the text box.
+            if (sel.Kind == AnnotationKind.Callout)
+            {
+                AddResizeHandle(sel, "Anchor", sel.AnchorX * pw - 5, sel.AnchorY * ph - 5, Cursors.Hand);
+            }
         }
         InvalidateMeasure();
         InvalidateArrange();
@@ -377,7 +399,17 @@ public class AnnotationLayer : Canvas
                     Padding = new Thickness(6),
                     FontSize = a.FontSize > 0 ? a.FontSize : 12,
                     FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
-                    Foreground = Brushes.Black,
+                    FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
+                    FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
+                    TextDecorations = a.Underline ? TextDecorations.Underline : null,
+                    TextAlignment = a.Align switch
+                    {
+                        TextAlign.Center => TextAlignment.Center,
+                        TextAlign.Right => TextAlignment.Right,
+                        TextAlign.Justify => TextAlignment.Justify,
+                        _ => TextAlignment.Left
+                    },
+                    Foreground = new SolidColorBrush(a.Color == Colors.Black || a.Color == default ? Colors.Black : a.Color),
                     MaxWidth = 240
                 };
                 var noteBorder = new System.Windows.Controls.Border
@@ -391,6 +423,73 @@ public class AnnotationLayer : Canvas
                 };
                 SetLeft(noteBorder, a.X * w); SetTop(noteBorder, a.Y * h);
                 return noteBorder;
+
+            case AnnotationKind.Callout:
+                {
+                    var boxLeft = a.X * w;
+                    var boxTop  = a.Y * h;
+                    var boxW    = System.Math.Max(20, a.Width  * w);
+                    var boxH    = System.Math.Max(16, a.Height * h);
+                    var anchorX = a.AnchorX * w;
+                    var anchorY = a.AnchorY * h;
+
+                    var container = new Canvas
+                    {
+                        Width = w, Height = h,
+                        IsHitTestVisible = false
+                    };
+
+                    // Line from the box edge closest to the anchor, out to the anchor point.
+                    var (lx, ly) = ClosestEdgePoint(boxLeft, boxTop, boxW, boxH, anchorX, anchorY);
+                    var stroke = new SolidColorBrush(a.Color);
+                    container.Children.Add(new Line
+                    {
+                        X1 = lx, Y1 = ly,
+                        X2 = anchorX, Y2 = anchorY,
+                        Stroke = stroke,
+                        StrokeThickness = System.Math.Max(1, a.StrokeThickness)
+                    });
+
+                    // Arrowhead at the anchor tip.
+                    var arrow = MakeArrowhead(lx, ly, anchorX, anchorY, a.Color);
+                    if (arrow != null) container.Children.Add(arrow);
+
+                    // The text box.
+                    var calloutText = new TextBlock
+                    {
+                        Text = a.Text ?? "",
+                        TextWrapping = TextWrapping.Wrap,
+                        Padding = new Thickness(6),
+                        FontSize = a.FontSize > 0 ? a.FontSize : 12,
+                        FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
+                        FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
+                        FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
+                        TextDecorations = a.Underline ? TextDecorations.Underline : null,
+                        TextAlignment = a.Align switch
+                        {
+                            TextAlign.Center => TextAlignment.Center,
+                            TextAlign.Right => TextAlignment.Right,
+                            TextAlign.Justify => TextAlignment.Justify,
+                            _ => TextAlignment.Left
+                        },
+                        Foreground = new SolidColorBrush(a.Color == default ? Colors.Black : a.Color)
+                    };
+                    var box = new System.Windows.Controls.Border
+                    {
+                        Background = new SolidColorBrush(Color.FromArgb(230, 255, 235, 130)),
+                        BorderBrush = stroke,
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(3),
+                        Width = boxW, Height = boxH,
+                        Child = calloutText
+                    };
+                    Canvas.SetLeft(box, boxLeft);
+                    Canvas.SetTop(box,  boxTop);
+                    container.Children.Add(box);
+
+                    SetLeft(container, 0); SetTop(container, 0);
+                    return container;
+                }
 
             case AnnotationKind.TextStamp:
                 {
@@ -484,20 +583,37 @@ public class AnnotationLayer : Canvas
 
         if (tool == ToolMode.StickyNote)
         {
-            var text = PromptDialog.Ask("Sticky Note", "Note text:");
-            if (!string.IsNullOrWhiteSpace(text))
+            // Use the text-stamp dialog so notes get font family / size / bold /
+            // italic / underline / alignment / colour just like text stamps.
+            var hex = "#" + MainVM.CurrentColor.R.ToString("X2") + MainVM.CurrentColor.G.ToString("X2") + MainVM.CurrentColor.B.ToString("X2");
+            var r = TextStampDialog.Show(
+                defaultFont: MainVM.CurrentFontFamily,
+                defaultSize: MainVM.CurrentFontSize,
+                defaultBold: MainVM.CurrentBold,
+                defaultItalic: MainVM.CurrentItalic,
+                defaultUnderline: MainVM.CurrentUnderline,
+                defaultColorHex: hex,
+                defaultAlign: MainVM.CurrentAlign);
+            if (r != null && !string.IsNullOrWhiteSpace(r.Text))
             {
-                var note = new PdfAnnotation
+                try
                 {
-                    PageIndex = Page.PageIndex, Kind = AnnotationKind.StickyNote,
-                    X = nx, Y = ny, Width = 0.02, Height = 0.02,
-                    Color = MainVM.CurrentColor, Text = text
-                };
-                Page.Annotations.Add(note);
-                // One-shot tool: revert to Select so the next click drags/edits the note
-                // instead of dropping another one.
-                MainVM.SelectedAnnotation = note;
-                MainVM.CurrentTool = ToolMode.Select;
+                    var c = (Color)ColorConverter.ConvertFromString(r.ColorHex);
+                    var note = new PdfAnnotation
+                    {
+                        PageIndex = Page.PageIndex, Kind = AnnotationKind.StickyNote,
+                        X = nx, Y = ny, Width = 0.02, Height = 0.02,
+                        Color = c, Text = r.Text,
+                        FontFamily = r.FontFamily, FontSize = r.FontSize,
+                        Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
+                        Align = r.Align
+                    };
+                    Page.Annotations.Add(note);
+                    MainVM.RememberFontChoice(r);
+                    MainVM.SelectedAnnotation = note;
+                    MainVM.CurrentTool = ToolMode.Select;
+                }
+                catch { }
             }
             return;
         }
@@ -545,6 +661,52 @@ public class AnnotationLayer : Canvas
         if (tool == ToolMode.Erase)
         {
             EraseAt(pos);
+            return;
+        }
+
+        if (tool == ToolMode.Callout)
+        {
+            // Click = the point being called out (arrow tip). Rich text dialog so
+            // callouts get font / size / colour / style like text stamps.
+            var hex = "#" + MainVM.CurrentColor.R.ToString("X2") + MainVM.CurrentColor.G.ToString("X2") + MainVM.CurrentColor.B.ToString("X2");
+            var r = TextStampDialog.Show(
+                defaultFont: MainVM.CurrentFontFamily,
+                defaultSize: MainVM.CurrentFontSize,
+                defaultBold: MainVM.CurrentBold,
+                defaultItalic: MainVM.CurrentItalic,
+                defaultUnderline: MainVM.CurrentUnderline,
+                defaultColorHex: hex,
+                defaultAlign: MainVM.CurrentAlign);
+            if (r != null && !string.IsNullOrWhiteSpace(r.Text))
+            {
+                try
+                {
+                    var c = (Color)ColorConverter.ConvertFromString(r.ColorHex);
+                    var boxOffsetX = 0.10;
+                    var boxOffsetY = 0.06;
+                    var boxW = 0.22;
+                    var boxH = 0.06;
+                    var boxX = System.Math.Clamp(nx + boxOffsetX, 0, 1 - boxW);
+                    var boxY = System.Math.Clamp(ny + boxOffsetY, 0, 1 - boxH);
+                    var callout = new PdfAnnotation
+                    {
+                        PageIndex = Page.PageIndex, Kind = AnnotationKind.Callout,
+                        X = boxX, Y = boxY, Width = boxW, Height = boxH,
+                        AnchorX = nx, AnchorY = ny,
+                        Color = c,
+                        StrokeThickness = 1.5,
+                        Text = r.Text,
+                        FontFamily = r.FontFamily, FontSize = r.FontSize,
+                        Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
+                        Align = r.Align
+                    };
+                    Page.Annotations.Add(callout);
+                    MainVM.RememberFontChoice(r);
+                    MainVM.SelectedAnnotation = callout;
+                    MainVM.CurrentTool = ToolMode.Select;
+                }
+                catch { }
+            }
             return;
         }
 
@@ -623,6 +785,10 @@ public class AnnotationLayer : Canvas
                     _resizingAnnotation.Width = System.Math.Max(0.02, nx - _resizingAnnotation.X);
                     _resizingAnnotation.Height = System.Math.Max(0.01, ny - _resizingAnnotation.Y);
                     break;
+                case "Anchor":
+                    _resizingAnnotation.AnchorX = nx;
+                    _resizingAnnotation.AnchorY = ny;
+                    break;
             }
             Rebuild();
             return;
@@ -633,8 +799,16 @@ public class AnnotationLayer : Canvas
             var pw = Page.PixelWidth > 0 ? Page.PixelWidth : ActualWidth;
             var ph = Page.PixelHeight > 0 ? Page.PixelHeight : ActualHeight;
             var mp = e.GetPosition(this);
-            _movingAnnotation.X = System.Math.Clamp(mp.X / pw - _moveOffsetInPage.X, 0, 1 - System.Math.Max(0.005, _movingAnnotation.Width));
-            _movingAnnotation.Y = System.Math.Clamp(mp.Y / ph - _moveOffsetInPage.Y, 0, 1 - System.Math.Max(0.005, _movingAnnotation.Height));
+            var newX = System.Math.Clamp(mp.X / pw - _moveOffsetInPage.X, 0, 1 - System.Math.Max(0.005, _movingAnnotation.Width));
+            var newY = System.Math.Clamp(mp.Y / ph - _moveOffsetInPage.Y, 0, 1 - System.Math.Max(0.005, _movingAnnotation.Height));
+            // Callouts: drag the box and the arrow anchor together, preserving their offset.
+            if (_movingAnnotation.Kind == AnnotationKind.Callout)
+            {
+                _movingAnnotation.AnchorX += (newX - _movingAnnotation.X);
+                _movingAnnotation.AnchorY += (newY - _movingAnnotation.Y);
+            }
+            _movingAnnotation.X = newX;
+            _movingAnnotation.Y = newY;
             Rebuild();
             return;
         }
@@ -808,6 +982,49 @@ public class AnnotationLayer : Canvas
         }
         var (bx, by, bw, bh) = VisualBounds(a, Page);
         return nx >= bx && nx <= bx + bw && ny >= by && ny <= by + bh;
+    }
+
+    /// <summary>Given a box and an external point, return the box-edge midpoint closest to the point.
+    /// Used for the callout's leader line so it emerges from the box side facing the anchor.</summary>
+    private static (double x, double y) ClosestEdgePoint(double boxLeft, double boxTop, double boxW, double boxH, double px, double py)
+    {
+        var cx = boxLeft + boxW / 2;
+        var cy = boxTop  + boxH / 2;
+        var dx = px - cx;
+        var dy = py - cy;
+        // Compare weighted absolute components to pick the face.
+        if (System.Math.Abs(dx) * boxH > System.Math.Abs(dy) * boxW)
+        {
+            var x = dx > 0 ? boxLeft + boxW : boxLeft;
+            return (x, cy);
+        }
+        else
+        {
+            var y = dy > 0 ? boxTop + boxH : boxTop;
+            return (cx, y);
+        }
+    }
+
+    /// <summary>Small filled triangle at the anchor tip, base pointing back along the leader line.</summary>
+    private static System.Windows.Shapes.Polygon? MakeArrowhead(double fromX, double fromY, double toX, double toY, Color color)
+    {
+        var dx = toX - fromX;
+        var dy = toY - fromY;
+        var len = System.Math.Sqrt(dx * dx + dy * dy);
+        if (len < 4) return null;
+        var ux = dx / len;
+        var uy = dy / len;
+        const double size = 10.0;
+        var baseX = toX - ux * size;
+        var baseY = toY - uy * size;
+        var px = -uy;
+        var py = ux;
+        var half = size / 2;
+        var poly = new System.Windows.Shapes.Polygon { Fill = new SolidColorBrush(color), IsHitTestVisible = false };
+        poly.Points.Add(new Point(baseX + px * half, baseY + py * half));
+        poly.Points.Add(new Point(baseX - px * half, baseY - py * half));
+        poly.Points.Add(new Point(toX, toY));
+        return poly;
     }
 
     private static double DistanceToSegment(double px, double py, double x1, double y1, double x2, double y2)

@@ -17,5 +17,6 @@ public enum ToolMode
     Cross,
     RectangleFilled,
     EllipseFilled,
-    Bullet
+    Bullet,
+    Callout
 }

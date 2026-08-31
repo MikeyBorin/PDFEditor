@@ -21,12 +21,15 @@ public static class TextStampDialog
         {
             Title = "Text",
             Width = 560,
+            Height = 500,
             Owner = Application.Current?.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.CanResize,
             ShowInTaskbar = false,
-            MinWidth = 500, MinHeight = 340,
-            SizeToContent = SizeToContent.Height
+            MinWidth = 500, MinHeight = 380
+            // No SizeToContent: with SizeToContent.Height, WPF resizes the window
+            // AFTER initial layout, and any ComboBox popup opened inside can capture
+            // stale coordinates and misposition to the top-left corner.
         };
         var root = new Grid { Margin = new Thickness(16) };
         for (int i = 0; i < 5; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

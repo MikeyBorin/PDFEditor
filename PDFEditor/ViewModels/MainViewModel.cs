@@ -183,7 +183,7 @@ public partial class MainViewModel : ObservableObject
     {
         // Remember which tool was last active in each group so the split button
         // reflects the user's most recent choice.
-        if (value is ToolMode.TextStamp or ToolMode.Tick or ToolMode.Cross or ToolMode.Bullet)
+        if (value is ToolMode.TextStamp or ToolMode.Tick or ToolMode.Cross or ToolMode.Bullet or ToolMode.Callout)
         {
             CurrentTextTool = value;
         }
@@ -250,8 +250,39 @@ public partial class MainViewModel : ObservableObject
     public event System.Action? TransientHighlightChanged;
 
     /// <summary>True when there are pending changes (saved-in-mem via ReplaceBytes,
-    /// or overlay annotations that haven't been flattened to the PDF yet).</summary>
-    public bool HasUnsavedChanges => _doc.IsDirty || Pages.Any(p => p.Annotations.Count > 0);
+    /// or overlay annotations that differ from the last save).</summary>
+    public bool HasUnsavedChanges => _doc.IsDirty || ComputeOverlaySignature() != _overlaySignatureAtLastSave;
+
+    // Signature snapshotted after each Load/Save. HasUnsavedChanges compares the current
+    // overlay state against it — so a note that was re-materialised from the just-saved
+    // file doesn't count as an unsaved change, but any subsequent move / edit / add /
+    // delete DOES because the signature diverges.
+    private string _overlaySignatureAtLastSave = "";
+
+    private string ComputeOverlaySignature()
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var p in Pages)
+        {
+            foreach (var a in p.Annotations)
+            {
+                sb.Append(p.PageIndex).Append('|')
+                  .Append((int)a.Kind).Append('|')
+                  .Append(a.X.ToString("R")).Append(',').Append(a.Y.ToString("R")).Append(',')
+                  .Append(a.Width.ToString("R")).Append(',').Append(a.Height.ToString("R")).Append('|')
+                  .Append(a.AnchorX.ToString("R")).Append(',').Append(a.AnchorY.ToString("R")).Append('|')
+                  .Append(a.Text ?? "").Append('|')
+                  .Append(a.Color.ToString()).Append('|')
+                  .Append(a.FontSize.ToString("R")).Append(':').Append(a.FontFamily ?? "").Append(':')
+                  .Append(a.Bold).Append(a.Italic).Append(a.Underline).Append((int)a.Align).Append('|')
+                  .Append(a.Filled).Append('|')
+                  .Append(a.InkPoints.Count).Append(';');
+            }
+        }
+        return sb.ToString();
+    }
+
+    private void SnapshotOverlaySignature() => _overlaySignatureAtLastSave = ComputeOverlaySignature();
 
     /// <summary>Prompt Save / Discard / Cancel if there are unsaved changes.
     /// Returns true if the caller may proceed; false if the user cancelled.</summary>
@@ -414,7 +445,13 @@ public partial class MainViewModel : ObservableObject
             IsBusy = true;
             StatusText = $"Loading {Path.GetFileName(path)}...";
             await Task.Run(() => _doc.Load(path));
+            // Strip native /Text sticky notes from the bytes BEFORE rendering so
+            // no small default icons end up in the page bitmaps; attach them to
+            // the fresh pages after rebuild.
+            var extractedNotes = ExtractStickyNotesForRematerialization();
             await RebuildPagesAsync();
+            ApplyRematerializedStickyNotes(extractedNotes);
+            SnapshotOverlaySignature();
             StatusText = $"Loaded {Path.GetFileName(path)} ({_doc.PageCount} pages).";
             _recents.Add(path);
         }
@@ -493,6 +530,35 @@ public partial class MainViewModel : ObservableObject
                 Pages[i].Annotations.Add(a);
     }
 
+    /// <summary>Two-phase round-trip. Phase 1 (before rebuild): extract every native
+    /// /Text sticky note from _doc.Bytes and strip them, so the render is clean.
+    /// Returns the list of extracted notes for phase 2 to attach after RebuildPagesAsync
+    /// has re-created the PageViewModels.</summary>
+    private System.Collections.Generic.List<Models.PdfAnnotation> ExtractStickyNotesForRematerialization()
+    {
+        var empty = new System.Collections.Generic.List<Models.PdfAnnotation>();
+        if (_doc.Bytes is null) return empty;
+        try
+        {
+            var (cleaned, notes) = _annotate.ExtractAndStripStickyNotes(_doc.Bytes);
+            if (notes.Count == 0) return empty;
+            _doc.ReplaceBytes(cleaned, label: "(extract sticky notes)", markDirty: false, pushUndo: false);
+            return notes;
+        }
+        catch { return empty; }
+    }
+
+    /// <summary>Phase 2: attach previously-extracted sticky notes to their pages.
+    /// Call after RebuildPagesAsync so the target Page objects exist.</summary>
+    private void ApplyRematerializedStickyNotes(System.Collections.Generic.List<Models.PdfAnnotation> notes)
+    {
+        foreach (var n in notes)
+        {
+            if (n.PageIndex >= 0 && n.PageIndex < Pages.Count)
+                Pages[n.PageIndex].Annotations.Add(n);
+        }
+    }
+
     private async Task RebuildPagesAsync()
     {
         Pages.Clear();
@@ -540,6 +606,8 @@ public partial class MainViewModel : ObservableObject
         };
         if (dlg.ShowDialog() != true) return;
         await FlattenAndPersist(dlg.FileName);
+        // Add the newly-saved file to Recent Files so it's one click away next launch.
+        if (!_doc.IsDirty && _doc.FilePath == dlg.FileName) _recents.Add(dlg.FileName);
     }
 
     private async Task FlattenAndPersist(string path)
@@ -560,9 +628,39 @@ public partial class MainViewModel : ObservableObject
             // the undo stack — Ctrl+Z can't unsave, and Save showing up as a "later
             // edit" pollutes flows that walk the stack (e.g., watermark delete).
             _doc.ReplaceBytes(bytes, label: "Save (flatten annotations)", markDirty: false, pushUndo: false);
-            _doc.Save(path);
+            // Retry loop: file-in-use errors (typically the target is open in another
+            // app) offer Retry / Cancel. Cancel keeps the flattened bytes in memory as
+            // unsaved so the user can free the file and try again with plain Ctrl+S.
+            while (true)
+            {
+                try
+                {
+                    _doc.Save(path);
+                    break;
+                }
+                catch (Exception ioEx) when (ioEx is System.IO.IOException || ioEx is UnauthorizedAccessException)
+                {
+                    var choice = MessageBox.Show(
+                        $"Could not save to:\n{path}\n\n{ioEx.Message}\n\n" +
+                        "The file may be open in another application (Acrobat, a browser, Explorer preview, etc.). " +
+                        "Close it, then click Yes to try again. No to cancel and keep the changes in memory.",
+                        "Save failed — retry?", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (choice != MessageBoxResult.Yes)
+                    {
+                        _doc.IsDirty = true;
+                        StatusText = "Save cancelled — changes are still in memory.";
+                        return;
+                    }
+                }
+            }
             foreach (var p in Pages) p.Annotations.Clear();
+            // Post-save round-trip: strip the just-written /Text notes from the bytes
+            // BEFORE rendering (so no icons in the bitmaps), then rebuild, then attach
+            // them back as editable overlays.
+            var extractedNotes = ExtractStickyNotesForRematerialization();
             await RebuildPagesAsync();
+            ApplyRematerializedStickyNotes(extractedNotes);
+            SnapshotOverlaySignature();
             StatusText = $"Saved to {Path.GetFileName(path)}.";
         }
         catch (Exception ex)
@@ -585,6 +683,7 @@ public partial class MainViewModel : ObservableObject
         ExtractedText = "";
         SearchResults.Clear();
         PageNumberInput = "0";
+        _overlaySignatureAtLastSave = "";
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
@@ -1831,9 +1930,46 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private void ClearAnnotationsOnCurrent()
+    private void ClearAnnotations()
     {
-        CurrentPage?.Annotations.Clear();
+        var curCount = CurrentPage?.Annotations.Count ?? 0;
+        var total    = Pages.Sum(p => p.Annotations.Count);
+        if (total == 0)
+        {
+            StatusText = "No annotations to clear.";
+            return;
+        }
+        var scope = Controls.ClearAnnotationsDialog.Show(curCount, total);
+        if (scope == Controls.ClearAnnotationsDialog.Scope.Cancel) return;
+
+        if (scope == Controls.ClearAnnotationsDialog.Scope.Current && CurrentPage != null)
+        {
+            var page = CurrentPage;
+            var snapshot = page.Annotations.ToList();
+            page.Annotations.Clear();
+            PushAnnotationUndo(() =>
+            {
+                foreach (var a in snapshot) page.Annotations.Add(a);
+                StatusText = $"Undo: restored {snapshot.Count} annotation(s) on page {page.PageIndex + 1}.";
+            });
+            StatusText = $"Cleared {snapshot.Count} annotation(s) on page {page.PageIndex + 1}.";
+        }
+        else if (scope == Controls.ClearAnnotationsDialog.Scope.All)
+        {
+            var snapshots = Pages.Select(p => (page: p, list: p.Annotations.ToList())).ToList();
+            foreach (var (page, _) in snapshots) page.Annotations.Clear();
+            PushAnnotationUndo(() =>
+            {
+                int restored = 0;
+                foreach (var (page, list) in snapshots)
+                {
+                    foreach (var a in list) page.Annotations.Add(a);
+                    restored += list.Count;
+                }
+                StatusText = $"Undo: restored {restored} annotation(s) across all pages.";
+            });
+            StatusText = $"Cleared {total} annotation(s) across all pages.";
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
@@ -1841,16 +1977,38 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null) return;
 
+        // Decide about note-type markup up front so we can exclude it from the flatten
+        // step when the user wants a note-free print. "Note-type" here means sticky
+        // notes (Layer 1 overlays or saved /Text) and callouts (Layer 1 overlays
+        // only — callouts flatten into the content stream on Save and are no longer
+        // separable after that).
+        var hasNoteOverlays = Pages.Any(p => p.Annotations.Any(a =>
+            a.Kind == Models.AnnotationKind.StickyNote ||
+            a.Kind == Models.AnnotationKind.Callout));
+        var hasSavedStickies = _annotate.HasStickyNotes(_doc.Bytes);
+        var includeMarkup = true;
+        if (hasNoteOverlays || hasSavedStickies)
+        {
+            var choice = MessageBox.Show(
+                "This document contains notes / callouts.\n\nInclude them in the print?",
+                "Print options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (choice == MessageBoxResult.Cancel) return;
+            includeMarkup = choice == MessageBoxResult.Yes;
+        }
+
         // Flatten unsaved overlays into a working byte stream so anything you've
-        // annotated this session — sticky notes, highlights, drawings, everything —
-        // appears in the print. Without this, printing before Save silently drops
-        // every overlay.
-        var overlays = Pages.SelectMany(p => p.Annotations).ToList();
+        // annotated this session appears in the print. When hiding markup we
+        // deliberately skip sticky notes and callouts so they don't get baked in.
+        var overlaysToFlatten = includeMarkup
+            ? Pages.SelectMany(p => p.Annotations).ToList()
+            : Pages.SelectMany(p => p.Annotations).Where(a =>
+                a.Kind != Models.AnnotationKind.StickyNote &&
+                a.Kind != Models.AnnotationKind.Callout).ToList();
         byte[] workingBytes;
         try
         {
-            workingBytes = overlays.Count > 0
-                ? await Task.Run(() => _annotate.Flatten(_doc.Bytes!, overlays))
+            workingBytes = overlaysToFlatten.Count > 0
+                ? await Task.Run(() => _annotate.Flatten(_doc.Bytes!, overlaysToFlatten))
                 : _doc.Bytes;
         }
         catch (Exception ex)
@@ -1858,20 +2016,6 @@ public partial class MainViewModel : ObservableObject
             MessageBox.Show("Could not prepare document for printing: " + ex.Message,
                 "Print failed", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
-        }
-
-        // Only ask if the working document actually contains sticky notes (/Text
-        // annotations). Hyperlinks, form fields, and other /Annots subtypes must
-        // NOT trigger the prompt — the previous check counted the whole /Annots
-        // array which fires on almost any PDF.
-        var includeMarkup = true;
-        if (_annotate.HasStickyNotes(workingBytes))
-        {
-            var choice = MessageBox.Show(
-                "This document contains sticky notes.\n\nInclude them in the print?",
-                "Print options", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if (choice == MessageBoxResult.Cancel) return;
-            includeMarkup = choice == MessageBoxResult.Yes;
         }
 
         var dlg = new System.Windows.Controls.PrintDialog
@@ -1890,8 +2034,9 @@ public partial class MainViewModel : ObservableObject
             last = System.Math.Min(_doc.PageCount, dlg.PageRange.PageTo);
         }
 
-        // workingBytes already has session overlays flattened in. Optionally strip
-        // sticky notes (/Text) if the user chose "No" to markup.
+        // workingBytes already has the session overlays flattened in (except for
+        // notes/callouts if hiding markup). Also strip native /Text sticky-note
+        // annotations from previously-saved documents when hiding markup.
         var printBytes = includeMarkup ? workingBytes : _annotate.StripAnnotations(workingBytes);
 
         try
@@ -2004,7 +2149,7 @@ public partial class MainViewModel : ObservableObject
         RedactSearchResultsCommand.NotifyCanExecuteChanged();
         RunOcrOnCurrentCommand.NotifyCanExecuteChanged();
         SearchCommand.NotifyCanExecuteChanged();
-        ClearAnnotationsOnCurrentCommand.NotifyCanExecuteChanged();
+        ClearAnnotationsCommand.NotifyCanExecuteChanged();
         PrintCommand.NotifyCanExecuteChanged();
         ShowHistoryCommand.NotifyCanExecuteChanged();
     }
