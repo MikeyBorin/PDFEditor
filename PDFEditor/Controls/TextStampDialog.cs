@@ -9,30 +9,34 @@ namespace PDFEditor.Controls;
 
 public static class TextStampDialog
 {
-    public record Result(string Text, string FontFamily, double FontSize, bool Bold, bool Italic, bool Underline, string ColorHex, PDFEditor.Models.TextAlign Align);
+    /// <summary><see cref="BackgroundHex"/> null/empty means "no background"
+    /// (transparent).</summary>
+    public record Result(string Text, string FontFamily, double FontSize, bool Bold, bool Italic, bool Underline, string ColorHex, PDFEditor.Models.TextAlign Align, string? BackgroundHex);
 
     public static Result? Show(string defaultText = "", string defaultFont = "Arial",
                                 double defaultSize = 14, bool defaultBold = false,
                                 bool defaultItalic = false, bool defaultUnderline = false,
                                 string defaultColorHex = "#000000",
-                                PDFEditor.Models.TextAlign defaultAlign = PDFEditor.Models.TextAlign.Left)
+                                PDFEditor.Models.TextAlign defaultAlign = PDFEditor.Models.TextAlign.Left,
+                                string? defaultBackgroundHex = null)
     {
         var w = new Window
         {
             Title = "Text",
             Width = 560,
-            Height = 500,
+            Height = 560,
             Owner = Application.Current?.MainWindow,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ResizeMode = ResizeMode.CanResize,
             ShowInTaskbar = false,
-            MinWidth = 500, MinHeight = 380
+            MinWidth = 500, MinHeight = 440
             // No SizeToContent: with SizeToContent.Height, WPF resizes the window
             // AFTER initial layout, and any ComboBox popup opened inside can capture
             // stale coordinates and misposition to the top-left corner.
         };
         var root = new Grid { Margin = new Thickness(16) };
-        for (int i = 0; i < 5; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // Rows 0..5 = Auto, 6 = Star (preview), 7 = Auto (buttons).
+        for (int i = 0; i < 6; i++) root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -99,7 +103,34 @@ public static class TextStampDialog
 
         root.Children.Add(WithRow(controls, 3));
 
-        // Row 4: bold/italic
+        // Row 4: background colour (label + swatch + hex + Pick + None).
+        // BackgroundHex is nullable — leave the field empty (or click None) to
+        // render with no background (transparent).
+        var bgRow = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+        bgRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });     // label
+        bgRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });     // swatch
+        bgRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // hex box
+        bgRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });     // Pick
+        bgRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });     // None
+        bgRow.Children.Add(WithCol(new TextBlock { Text = "Background", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }, 0));
+        var bgSwatch = new System.Windows.Shapes.Rectangle
+        {
+            Width = 24, Height = 24,
+            Stroke = System.Windows.Media.Brushes.Gray,
+            StrokeThickness = 1,
+            Fill = string.IsNullOrEmpty(defaultBackgroundHex) ? Brushes.Transparent : TryParseBrush(defaultBackgroundHex!),
+            Margin = new Thickness(0, 0, 6, 0)
+        };
+        bgRow.Children.Add(WithCol(bgSwatch, 1));
+        var bgHex = new TextBox { Text = defaultBackgroundHex ?? "", MinHeight = 24 };
+        bgRow.Children.Add(WithCol(bgHex, 2));
+        var bgPick = new Button { Content = "Pick...", Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(6, 2, 6, 2) };
+        bgRow.Children.Add(WithCol(bgPick, 3));
+        var bgNone = new Button { Content = "None", Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(6, 2, 6, 2), ToolTip = "Clear the background (transparent)." };
+        bgRow.Children.Add(WithCol(bgNone, 4));
+        root.Children.Add(WithRow(bgRow, 4));
+
+        // Row 5: bold/italic
         var style = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
         var bold = new CheckBox { Content = "Bold", IsChecked = defaultBold, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
         var italic = new CheckBox { Content = "Italic", IsChecked = defaultItalic, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -112,7 +143,7 @@ public static class TextStampDialog
         alignBox.SelectedItem = defaultAlign.ToString();
         style.Children.Add(alignLabel);
         style.Children.Add(alignBox);
-        root.Children.Add(WithRow(style, 4));
+        root.Children.Add(WithRow(style, 5));
 
         // Row 5: preview area
         var previewBox = new Border
@@ -129,14 +160,14 @@ public static class TextStampDialog
             TextWrapping = TextWrapping.Wrap
         };
         previewBox.Child = previewText;
-        root.Children.Add(WithRow(previewBox, 5));
+        root.Children.Add(WithRow(previewBox, 6));
 
-        // Row 6: buttons
+        // Row 7: buttons
         var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         var ok = new Button { Content = "OK", Width = 80, Height = 28, IsDefault = true, Margin = new Thickness(0, 0, 8, 0) };
         var cancel = new Button { Content = "Cancel", Width = 80, Height = 28, IsCancel = true };
         btns.Children.Add(ok); btns.Children.Add(cancel);
-        root.Children.Add(WithRow(btns, 6));
+        root.Children.Add(WithRow(btns, 7));
 
         w.Content = root;
 
@@ -159,10 +190,23 @@ public static class TextStampDialog
             };
             previewText.Text = string.IsNullOrEmpty(text.Text) ? "Preview" : text.Text;
             swatch.Fill = TryParseBrush(colorHex.Text);
+            // Background: empty hex = transparent (preview shows white behind).
+            if (string.IsNullOrWhiteSpace(bgHex.Text))
+            {
+                bgSwatch.Fill = Brushes.Transparent;
+                previewBox.Background = Brushes.White;
+            }
+            else
+            {
+                var bgBrush = TryParseBrush(bgHex.Text);
+                bgSwatch.Fill = bgBrush;
+                previewBox.Background = bgBrush;
+            }
         }
 
         text.TextChanged += (_, _) => UpdatePreview();
         colorHex.TextChanged += (_, _) => UpdatePreview();
+        bgHex.TextChanged += (_, _) => UpdatePreview();
         size.SelectionChanged += (_, _) => UpdatePreview();
         size.LostFocus += (_, _) => UpdatePreview();
         size.KeyUp += (_, _) => UpdatePreview();
@@ -184,6 +228,21 @@ public static class TextStampDialog
                 UpdatePreview();
             }
         };
+        bgPick.Click += (_, _) =>
+        {
+            using var dlg = new System.Windows.Forms.ColorDialog { AllowFullOpen = true, FullOpen = true };
+            if (!string.IsNullOrWhiteSpace(bgHex.Text))
+            {
+                var current = TryParseColor(bgHex.Text);
+                dlg.Color = System.Drawing.Color.FromArgb(current.A, current.R, current.G, current.B);
+            }
+            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                bgHex.Text = $"#{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
+                UpdatePreview();
+            }
+        };
+        bgNone.Click += (_, _) => { bgHex.Text = ""; UpdatePreview(); };
 
         Result? r = null;
         ok.Click += (_, _) =>
@@ -195,6 +254,7 @@ public static class TextStampDialog
                 "Justify" => PDFEditor.Models.TextAlign.Justify,
                 _ => PDFEditor.Models.TextAlign.Left
             };
+            var bgText = (bgHex.Text ?? "").Trim();
             r = new Result(
                 text.Text,
                 (font.SelectedItem as string) ?? font.Text ?? "Arial",
@@ -203,7 +263,8 @@ public static class TextStampDialog
                 italic.IsChecked == true,
                 underline.IsChecked == true,
                 colorHex.Text,
-                alignSel);
+                alignSel,
+                BackgroundHex: string.IsNullOrEmpty(bgText) ? null : bgText);
             w.DialogResult = true;
         };
         text.Loaded += (_, _) => { text.Focus(); text.SelectAll(); };

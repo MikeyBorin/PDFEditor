@@ -91,7 +91,8 @@ public class AnnotationLayer : Canvas
                     defaultItalic: a.Italic,
                     defaultUnderline: a.Underline,
                     defaultColorHex: hex,
-                    defaultAlign: a.Align);
+                    defaultAlign: a.Align,
+                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor));
                 if (r != null)
                 {
                     try
@@ -105,6 +106,7 @@ public class AnnotationLayer : Canvas
                         a.Underline = r.Underline;
                         a.Align = r.Align;
                         a.Color = c;
+                        a.BackgroundColor = ParseHexOrNull(r.BackgroundHex);
                         MainVM.RememberFontChoice(r);
                         // Do NOT touch X/Y or Width (preserves resize) — keep layout exactly.
                         Page.RaiseAnnotationChanged();
@@ -124,7 +126,8 @@ public class AnnotationLayer : Canvas
                     defaultSize: a.FontSize > 0 ? a.FontSize : 12,
                     defaultBold: a.Bold, defaultItalic: a.Italic, defaultUnderline: a.Underline,
                     defaultColorHex: hex,
-                    defaultAlign: a.Align);
+                    defaultAlign: a.Align,
+                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor) ?? "#FFEB82");
                 if (r != null)
                 {
                     try
@@ -133,6 +136,7 @@ public class AnnotationLayer : Canvas
                         a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
                         a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
                         a.Align = r.Align; a.Color = c;
+                        a.BackgroundColor = ParseHexOrNull(r.BackgroundHex);
                         MainVM.RememberFontChoice(r);
                         Page.RaiseAnnotationChanged();
                         MainVM.StatusText = a.Kind == AnnotationKind.StickyNote ? "Note updated." : "Callout updated.";
@@ -412,9 +416,12 @@ public class AnnotationLayer : Canvas
                     Foreground = new SolidColorBrush(a.Color == Colors.Black || a.Color == default ? Colors.Black : a.Color),
                     MaxWidth = 240
                 };
+                var noteBg = a.BackgroundColor is Color bc
+                    ? Color.FromArgb(230, bc.R, bc.G, bc.B)
+                    : Color.FromArgb(230, 255, 235, 130);   // default yellow post-it
                 var noteBorder = new System.Windows.Controls.Border
                 {
-                    Background = new SolidColorBrush(Color.FromArgb(230, 255, 235, 130)),
+                    Background = new SolidColorBrush(noteBg),
                     BorderBrush = Brushes.DarkGoldenrod,
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(3),
@@ -474,9 +481,12 @@ public class AnnotationLayer : Canvas
                         },
                         Foreground = new SolidColorBrush(a.Color == default ? Colors.Black : a.Color)
                     };
+                    var calloutBg = a.BackgroundColor is Color cbc
+                        ? Color.FromArgb(230, cbc.R, cbc.G, cbc.B)
+                        : Color.FromArgb(230, 255, 235, 130);
                     var box = new System.Windows.Controls.Border
                     {
-                        Background = new SolidColorBrush(Color.FromArgb(230, 255, 235, 130)),
+                        Background = new SolidColorBrush(calloutBg),
                         BorderBrush = stroke,
                         BorderThickness = new Thickness(1),
                         CornerRadius = new CornerRadius(3),
@@ -521,6 +531,21 @@ public class AnnotationLayer : Canvas
                         },
                         Tag = a
                     };
+                    if (a.BackgroundColor is Color tsbg)
+                    {
+                        // Wrap in a padded Border so the background is visible around
+                        // the glyphs. Slight rounding to match Note / Callout styling.
+                        var wrap = new System.Windows.Controls.Border
+                        {
+                            Background = new SolidColorBrush(tsbg),
+                            CornerRadius = new CornerRadius(2),
+                            Padding = new Thickness(2),
+                            Child = tb,
+                            Tag = a
+                        };
+                        SetLeft(wrap, a.X * w); SetTop(wrap, a.Y * h);
+                        return wrap;
+                    }
                     SetLeft(tb, a.X * w); SetTop(tb, a.Y * h);
                     return tb;
                 }
@@ -593,7 +618,8 @@ public class AnnotationLayer : Canvas
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
-                defaultAlign: MainVM.CurrentAlign);
+                defaultAlign: MainVM.CurrentAlign,
+                defaultBackgroundHex: "#FFEB82");
             if (r != null && !string.IsNullOrWhiteSpace(r.Text))
             {
                 try
@@ -606,7 +632,8 @@ public class AnnotationLayer : Canvas
                         Color = c, Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
-                        Align = r.Align
+                        Align = r.Align,
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
                     AddAnnotationWithUndo(note);
                     MainVM.RememberFontChoice(r);
@@ -628,7 +655,8 @@ public class AnnotationLayer : Canvas
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
-                defaultAlign: MainVM.CurrentAlign);
+                defaultAlign: MainVM.CurrentAlign,
+                defaultBackgroundHex: null);
             if (r != null && !string.IsNullOrWhiteSpace(r.Text))
             {
                 try
@@ -644,7 +672,8 @@ public class AnnotationLayer : Canvas
                         Color = c, Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
-                        Align = r.Align
+                        Align = r.Align,
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
                     AddAnnotationWithUndo(stamp);
                     MainVM.RememberFontChoice(r);
@@ -676,7 +705,8 @@ public class AnnotationLayer : Canvas
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
-                defaultAlign: MainVM.CurrentAlign);
+                defaultAlign: MainVM.CurrentAlign,
+                defaultBackgroundHex: "#FFEB82");
             if (r != null && !string.IsNullOrWhiteSpace(r.Text))
             {
                 try
@@ -698,7 +728,8 @@ public class AnnotationLayer : Canvas
                         Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
-                        Align = r.Align
+                        Align = r.Align,
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
                     AddAnnotationWithUndo(callout);
                     MainVM.RememberFontChoice(r);
@@ -894,6 +925,16 @@ public class AnnotationLayer : Canvas
     {
         if (MainVM is null) return;
         MainVM.HandleRegionSelection(pageIndex, region.X, region.Y, region.W, region.H, tool);
+    }
+
+    private static string? BgHexOrNull(Color? c)
+        => c is null ? null : $"#{c.Value.R:X2}{c.Value.G:X2}{c.Value.B:X2}";
+
+    private static Color? ParseHexOrNull(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return null;
+        try { return (Color)ColorConverter.ConvertFromString(hex); }
+        catch { return null; }
     }
 
     /// <summary>Add an annotation to the current page and register an undo that

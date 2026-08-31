@@ -36,6 +36,11 @@ public class PdfAnnotation
     public double Width { get; set; }
     public double Height { get; set; }
     public Color Color { get; set; } = Colors.Yellow;
+    /// <summary>Background/fill colour for text-carrying annotations
+    /// (Notes, Callouts, Text stamps). Null means no background (transparent
+    /// for stamps; falls back to the built-in yellow for notes/callouts to
+    /// keep the pre-feature look).</summary>
+    public Color? BackgroundColor { get; set; }
     public double StrokeThickness { get; set; } = 2.0;
     public string? Text { get; set; }
     public string? ImagePath { get; set; }

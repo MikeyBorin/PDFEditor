@@ -1292,7 +1292,8 @@ public partial class MainViewModel : ObservableObject
             defaultItalic: CurrentItalic,
             defaultUnderline: CurrentUnderline,
             defaultColorHex: hex,
-            defaultAlign: CurrentAlign);
+            defaultAlign: CurrentAlign,
+            defaultBackgroundHex: null);
         if (r is null) return;
         try
         {
@@ -1309,6 +1310,9 @@ public partial class MainViewModel : ObservableObject
             };
             page.Annotations.Add(whiteout);
             // Text stamp with the (possibly edited) source text.
+            Color? bg = null;
+            if (!string.IsNullOrWhiteSpace(r.BackgroundHex))
+            { try { bg = (Color)ColorConverter.ConvertFromString(r.BackgroundHex); } catch { } }
             var stamp = new Models.PdfAnnotation
             {
                 PageIndex = pageIndex, Kind = Models.AnnotationKind.TextStamp,
@@ -1317,7 +1321,8 @@ public partial class MainViewModel : ObservableObject
                 Height = System.Math.Max(nh, 0.02),
                 Color = c, Text = r.Text,
                 FontFamily = r.FontFamily, FontSize = safeFontSize,
-                Bold = r.Bold, Italic = r.Italic, Underline = r.Underline, Align = r.Align
+                Bold = r.Bold, Italic = r.Italic, Underline = r.Underline, Align = r.Align,
+                BackgroundColor = bg
             };
             page.Annotations.Add(stamp);
             SelectedAnnotation = stamp;
@@ -1458,13 +1463,15 @@ public partial class MainViewModel : ObservableObject
         if (a.Kind == Models.AnnotationKind.TextStamp)
         {
             var hex = "#" + a.Color.R.ToString("X2") + a.Color.G.ToString("X2") + a.Color.B.ToString("X2");
+            var bgDefault = a.BackgroundColor is Color bgc ? $"#{bgc.R:X2}{bgc.G:X2}{bgc.B:X2}" : null;
             var r = Controls.TextStampDialog.Show(
                 defaultText: a.Text ?? "",
                 defaultFont: string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily,
                 defaultSize: a.FontSize > 0 ? a.FontSize : 14,
                 defaultBold: a.Bold, defaultItalic: a.Italic, defaultUnderline: a.Underline,
                 defaultColorHex: hex,
-                defaultAlign: a.Align);
+                defaultAlign: a.Align,
+                defaultBackgroundHex: bgDefault);
             if (r != null)
             {
                 try
@@ -1473,6 +1480,10 @@ public partial class MainViewModel : ObservableObject
                     a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
                     a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
                     a.Align = r.Align; a.Color = c;
+                    Color? bg = null;
+                    if (!string.IsNullOrWhiteSpace(r.BackgroundHex))
+                    { try { bg = (Color)ColorConverter.ConvertFromString(r.BackgroundHex); } catch { } }
+                    a.BackgroundColor = bg;
                     RememberFontChoice(r);
                     CurrentPage?.RaiseAnnotationChanged();
                     StatusText = "Text updated.";

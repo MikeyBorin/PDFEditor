@@ -113,6 +113,31 @@ public class AnnotationService
                                 Icon = PdfSharpCore.Pdf.Annotations.PdfTextAnnotationIcon.Note
                             };
                             page.Annotations.Add(textAnn);
+                            // Stash the user's styling in marker keys so ExtractAndStripStickyNotes
+                            // can re-materialise the overlay with the original attributes (text
+                            // colour, font, size, weight, style, alignment). Native /Text carries
+                            // only Contents; without these markers the extracted overlay would
+                            // fall back to default black text at 14pt.
+                            var doc2 = page.Owner;
+                            var underlying = textAnn.Elements;
+                            var txR = a.Color.R / 255.0;
+                            var txG = a.Color.G / 255.0;
+                            var txB = a.Color.B / 255.0;
+                            underlying["/ArtiMaxNoteColor"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                new PdfSharpCore.Pdf.PdfReal(txR), new PdfSharpCore.Pdf.PdfReal(txG), new PdfSharpCore.Pdf.PdfReal(txB));
+                            if (a.BackgroundColor is System.Windows.Media.Color noteBg)
+                            {
+                                underlying["/ArtiMaxNoteBg"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                    new PdfSharpCore.Pdf.PdfReal(noteBg.R / 255.0),
+                                    new PdfSharpCore.Pdf.PdfReal(noteBg.G / 255.0),
+                                    new PdfSharpCore.Pdf.PdfReal(noteBg.B / 255.0));
+                            }
+                            if (!string.IsNullOrEmpty(a.FontFamily)) underlying.SetString("/ArtiMaxNoteFont", a.FontFamily);
+                            if (a.FontSize > 0) underlying.SetReal("/ArtiMaxNoteSize", a.FontSize);
+                            if (a.Bold)      underlying.SetBoolean("/ArtiMaxNoteBold", true);
+                            if (a.Italic)    underlying.SetBoolean("/ArtiMaxNoteItalic", true);
+                            if (a.Underline) underlying.SetBoolean("/ArtiMaxNoteUnderline", true);
+                            underlying.SetName("/ArtiMaxNoteAlign", "/" + a.Align.ToString());
                         }
                         break;
 
@@ -148,11 +173,18 @@ public class AnnotationService
                             var fs = a.FontSize > 0 ? a.FontSize : 12;
                             var inv = System.Globalization.CultureInfo.InvariantCulture;
                             // /C on a /FreeText is interpreted by Acrobat/most viewers as the
-                            // INTERIOR fill colour, not the border/text. To match our overlay's
-                            // yellow post-it look, hard-code /C to light yellow. The user's
-                            // annotation colour goes into /DA for the text (and into /ArtiMax
-                            // custom keys so we can restore it exactly on Load).
-                            const double bgR = 1.0, bgG = 0.92, bgB = 0.51;
+                            // INTERIOR fill colour, not the border/text. Use the user's chosen
+                            // background if they picked one; otherwise fall back to the historical
+                            // yellow post-it look so callouts stay visible in external viewers.
+                            // The text colour goes into /DA, and both text + bg go into /ArtiMax
+                            // marker keys so ExtractAndStripStickyNotes restores them exactly.
+                            double bgR = 1.0, bgG = 0.92, bgB = 0.51;
+                            if (a.BackgroundColor is System.Windows.Media.Color cbc)
+                            {
+                                bgR = cbc.R / 255.0;
+                                bgG = cbc.G / 255.0;
+                                bgB = cbc.B / 255.0;
+                            }
                             var txR = a.Color.R / 255.0;
                             var txG = a.Color.G / 255.0;
                             var txB = a.Color.B / 255.0;
@@ -187,6 +219,13 @@ public class AnnotationService
                             ft.Elements.SetBoolean("/ArtiMaxCallout", true);
                             ft.Elements["/ArtiMaxCalloutColor"] = new PdfSharpCore.Pdf.PdfArray(doc2,
                                 new PdfSharpCore.Pdf.PdfReal(txR), new PdfSharpCore.Pdf.PdfReal(txG), new PdfSharpCore.Pdf.PdfReal(txB));
+                            if (a.BackgroundColor is System.Windows.Media.Color cbg)
+                            {
+                                ft.Elements["/ArtiMaxCalloutBg"] = new PdfSharpCore.Pdf.PdfArray(doc2,
+                                    new PdfSharpCore.Pdf.PdfReal(cbg.R / 255.0),
+                                    new PdfSharpCore.Pdf.PdfReal(cbg.G / 255.0),
+                                    new PdfSharpCore.Pdf.PdfReal(cbg.B / 255.0));
+                            }
 
                             doc2.Internals.AddObject(ft);
                             var annots = page.Elements.GetArray("/Annots");
@@ -214,6 +253,13 @@ public class AnnotationService
                             var lines = WrapText(a.Text ?? "", font, gfx, maxW);
                             var baselineY = a.Y * h + size;
                             var leftX = a.X * w;
+                            // Optional background fill: draw before the text so glyphs paint on top.
+                            if (a.BackgroundColor is System.Windows.Media.Color bgCol)
+                            {
+                                var bgBrush = new XSolidBrush(XColor.FromArgb(bgCol.R, bgCol.G, bgCol.B));
+                                var bgH = System.Math.Max(size, lineHeight * lines.Count) + 4;
+                                gfx.DrawRectangle(bgBrush, leftX - 2, a.Y * h - 2, maxW + 4, bgH);
+                            }
                             for (int i = 0; i < lines.Count; i++)
                             {
                                 var line = lines[i];
@@ -293,6 +339,50 @@ public class AnnotationService
                     var normX = pageW > 0 ? rect.X1 / pageW : 0;
                     // /Rect is (llx lly urx ury) in PDF bottom-left coords; ury is the icon top.
                     var normY = pageH > 0 ? 1.0 - (rect.Y2 / pageH) : 0;
+
+                    // Read the marker keys the Save path wrote so the overlay comes
+                    // back with the user's original text colour / font / style. If a
+                    // note pre-dates the markers, fall back to black text at defaults.
+                    var noteColor = System.Windows.Media.Colors.Black;
+                    if (dict.Elements.TryGetValue("/ArtiMaxNoteColor", out var ncItem))
+                    {
+                        var arr = ncItem as PdfSharpCore.Pdf.PdfArray
+                               ?? (ncItem as PdfSharpCore.Pdf.Advanced.PdfReference)?.Value as PdfSharpCore.Pdf.PdfArray;
+                        if (arr != null && arr.Elements.Count >= 3)
+                        {
+                            var r = (byte)System.Math.Clamp(arr.Elements.GetReal(0) * 255, 0, 255);
+                            var g = (byte)System.Math.Clamp(arr.Elements.GetReal(1) * 255, 0, 255);
+                            var b = (byte)System.Math.Clamp(arr.Elements.GetReal(2) * 255, 0, 255);
+                            noteColor = System.Windows.Media.Color.FromRgb(r, g, b);
+                        }
+                    }
+                    System.Windows.Media.Color? noteBg = null;
+                    if (dict.Elements.TryGetValue("/ArtiMaxNoteBg", out var nbItem))
+                    {
+                        var arr = nbItem as PdfSharpCore.Pdf.PdfArray
+                               ?? (nbItem as PdfSharpCore.Pdf.Advanced.PdfReference)?.Value as PdfSharpCore.Pdf.PdfArray;
+                        if (arr != null && arr.Elements.Count >= 3)
+                        {
+                            var r = (byte)System.Math.Clamp(arr.Elements.GetReal(0) * 255, 0, 255);
+                            var g = (byte)System.Math.Clamp(arr.Elements.GetReal(1) * 255, 0, 255);
+                            var b = (byte)System.Math.Clamp(arr.Elements.GetReal(2) * 255, 0, 255);
+                            noteBg = System.Windows.Media.Color.FromRgb(r, g, b);
+                        }
+                    }
+                    var fam   = dict.Elements.GetString("/ArtiMaxNoteFont");
+                    var fsize = dict.Elements.ContainsKey("/ArtiMaxNoteSize") ? dict.Elements.GetReal("/ArtiMaxNoteSize") : 12.0;
+                    var bold  = dict.Elements.GetBoolean("/ArtiMaxNoteBold");
+                    var ital  = dict.Elements.GetBoolean("/ArtiMaxNoteItalic");
+                    var uline = dict.Elements.GetBoolean("/ArtiMaxNoteUnderline");
+                    var alignName = dict.Elements.GetName("/ArtiMaxNoteAlign");
+                    var align = alignName switch
+                    {
+                        "/Center"  => Models.TextAlign.Center,
+                        "/Right"   => Models.TextAlign.Right,
+                        "/Justify" => Models.TextAlign.Justify,
+                        _          => Models.TextAlign.Left
+                    };
+
                     notes.Add(new Models.PdfAnnotation
                     {
                         PageIndex = p,
@@ -301,7 +391,15 @@ public class AnnotationService
                         Y = System.Math.Clamp(normY, 0, 1),
                         Width = 0.03,
                         Height = 0.03,
-                        Text = contents
+                        Text = contents,
+                        Color = noteColor,
+                        FontFamily = string.IsNullOrEmpty(fam) ? "Arial" : fam,
+                        FontSize = fsize > 0 ? fsize : 12,
+                        Bold = bold,
+                        Italic = ital,
+                        Underline = uline,
+                        Align = align,
+                        BackgroundColor = noteBg
                     });
                     annots.Elements.RemoveAt(i);
                 }
@@ -350,6 +448,20 @@ public class AnnotationService
                         }
                     }
 
+                    System.Windows.Media.Color? calloutBg = null;
+                    if (dict.Elements.TryGetValue("/ArtiMaxCalloutBg", out var cbItem))
+                    {
+                        var arr = cbItem as PdfSharpCore.Pdf.PdfArray
+                               ?? (cbItem as PdfSharpCore.Pdf.Advanced.PdfReference)?.Value as PdfSharpCore.Pdf.PdfArray;
+                        if (arr != null && arr.Elements.Count >= 3)
+                        {
+                            var r2 = (byte)System.Math.Clamp(arr.Elements.GetReal(0) * 255, 0, 255);
+                            var g2 = (byte)System.Math.Clamp(arr.Elements.GetReal(1) * 255, 0, 255);
+                            var b2 = (byte)System.Math.Clamp(arr.Elements.GetReal(2) * 255, 0, 255);
+                            calloutBg = System.Windows.Media.Color.FromRgb(r2, g2, b2);
+                        }
+                    }
+
                     notes.Add(new Models.PdfAnnotation
                     {
                         PageIndex = p,
@@ -362,7 +474,8 @@ public class AnnotationService
                         AnchorY = System.Math.Clamp(anchorY, 0, 1),
                         Text = contents,
                         Color = callColor,
-                        StrokeThickness = 1.5
+                        StrokeThickness = 1.5,
+                        BackgroundColor = calloutBg
                     });
                     annots.Elements.RemoveAt(i);
                 }
