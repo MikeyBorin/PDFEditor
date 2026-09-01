@@ -12,6 +12,8 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        PDFEditor.Services.PopupPositionFix.Install();
+
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             LogFatal("AppDomain.UnhandledException", args.ExceptionObject as Exception);
         DispatcherUnhandledException += (_, args) =>

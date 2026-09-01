@@ -10,6 +10,11 @@ public class ViewSettings
     public ZoomMode ZoomMode { get; set; } = ZoomMode.FitWidth;
     /// <summary>Only used when <see cref="ZoomMode"/> is <see cref="ZoomMode.Custom"/>. 1.0 = 100%.</summary>
     public double CustomZoom { get; set; } = 1.0;
+
+    /// <summary>Last-used annotation colour (hex "#RRGGBB"). Persisted so the
+    /// swatch in the toolbar reopens on next launch showing the colour the user
+    /// finished with.</summary>
+    public string CurrentColorHex { get; set; } = "#000000";
 }
 
 /// <summary>Persists user's zoom-mode preference across app runs. JSON in

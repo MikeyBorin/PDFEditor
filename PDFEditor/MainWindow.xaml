@@ -228,21 +228,17 @@
                     <Separator Width="1" Background="{DynamicResource Border}" Margin="6,4"/>
 
                     <StackPanel x:Name="TB_ColourSwatches" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
-                        <TextBlock Text="Colour:" VerticalAlignment="Center" Foreground="{DynamicResource TextMuted}" Margin="0,0,6,0"/>
-                        <Button Command="{Binding PickColourCommand}" ToolTip="Click to pick any colour" Cursor="Hand"
-                                Width="28" Height="28" Padding="0" Margin="0"
-                                Background="{Binding CurrentColor, Converter={StaticResource ColorToBrush}}"
-                                BorderBrush="{Binding CurrentColor, Converter={StaticResource ContrastBorder}}"
-                                BorderThickness="3">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="4"
-                                            SnapsToDevicePixels="True"/>
-                                </ControlTemplate>
-                            </Button.Template>
+                        <Button x:Name="TB_ColourButton" Click="ColourButton_Click" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0" Padding="4,2"
+                                ToolTip="Choose the annotation colour">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Colour:" VerticalAlignment="Center" Foreground="{DynamicResource TextMuted}" Margin="0,0,6,0"/>
+                                <Border Width="24" Height="24" CornerRadius="3" SnapsToDevicePixels="True"
+                                        Background="{Binding CurrentColor, Converter={StaticResource ColorToBrush}}"
+                                        BorderBrush="{Binding CurrentColor, Converter={StaticResource ContrastBorder}}"
+                                        BorderThickness="1"/>
+                                <TextBlock Text=" ▾" FontSize="10" VerticalAlignment="Center" Opacity="0.7" Margin="4,0,0,0"/>
+                            </StackPanel>
                         </Button>
                     </StackPanel>
 

@@ -214,6 +214,12 @@ public partial class MainViewModel : ObservableObject
         }
     }
     [ObservableProperty] private Color currentColor = Colors.Black;
+
+    partial void OnCurrentColorChanged(Color value)
+    {
+        ViewSettings.Settings.CurrentColorHex = $"#{value.R:X2}{value.G:X2}{value.B:X2}";
+        ViewSettings.Save();
+    }
     [ObservableProperty] private double currentThickness = 3.0;
     // Last-used text-stamp font state, persisted across text-edit actions so the dialog
     // reopens with your previous choice instead of resetting to Arial 14.
@@ -339,9 +345,16 @@ public partial class MainViewModel : ObservableObject
         _recents.Changed += RefreshRecents;
         RefreshRecents();
         // Restore persisted view preference. Set backing fields directly so the
-        // OnZoomModeChanged / OnZoomChanged partials don't fire a redundant Save.
+        // OnZoomModeChanged / OnZoomChanged / OnCurrentColorChanged partials
+        // don't fire a redundant Save.
         zoomMode = ViewSettings.Settings.ZoomMode;
         zoom = ViewSettings.Settings.CustomZoom;
+        try
+        {
+            var c = (Color)ColorConverter.ConvertFromString(ViewSettings.Settings.CurrentColorHex);
+            currentColor = c;
+        }
+        catch { }
     }
 
     private void RefreshRecents()
