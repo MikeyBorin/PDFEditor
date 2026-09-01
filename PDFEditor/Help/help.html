@@ -188,7 +188,7 @@
 <div class="layout">
   <nav>
     <h1>ArtiMax PDF Editor</h1>
-    <div class="sub">Help &amp; reference · v1.0.1</div>
+    <div class="sub">Help &amp; reference · v1.0.2</div>
     <ul>
       <li><a href="#disclaimer">Disclaimer</a></li>
       <li><a href="#overview">Overview</a></li>
@@ -201,7 +201,8 @@
       <li><a href="#tool-highlight">Highlight</a></li>
       <li><a href="#tool-note">Sticky Note</a></li>
       <li><a href="#tool-text">Text</a></li>
-      <li><a href="#tool-tick">Tick &amp; X</a></li>
+      <li><a href="#tool-callout">Callout</a></li>
+      <li><a href="#tool-tick">Tick, X &amp; Bullet</a></li>
       <li><a href="#tool-draw">Draw (ink)</a></li>
       <li><a href="#tool-rect">Rectangle / Oval</a></li>
       <li><a href="#tool-whiteout">Whiteout</a></li>
@@ -209,6 +210,7 @@
       <li><a href="#tool-erase">Erase</a></li>
       <li><a href="#tool-seltext">Select Text</a></li>
       <li><a href="#tool-selimg">Select Image</a></li>
+      <li><a href="#tool-colour">Colour picker</a></li>
 
       <li class="group">Documents</li>
       <li><a href="#signatures">Signatures</a></li>
@@ -222,6 +224,8 @@
       <li><a href="#forms">Fill forms</a></li>
       <li><a href="#security">Security</a></li>
       <li><a href="#compare">Compare</a></li>
+      <li><a href="#clear-annotations">Clear Annotations</a></li>
+      <li><a href="#history">Edit history</a></li>
 
       <li class="group">UI</li>
       <li><a href="#theme">Themes</a></li>
@@ -288,8 +292,15 @@
     <h2 id="viewing">Viewing &amp; navigation</h2>
     <ul>
       <li><strong>Continuous scroll.</strong> All pages render vertically; scroll with the mouse wheel or scrollbar.</li>
-      <li><strong>Zoom.</strong> Use the toolbar zoom combo (accepts any percentage from 25% to 400%), the
-        <strong>+</strong>/<strong>−</strong> buttons, or <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd>.</li>
+      <li><strong>Zoom.</strong> The toolbar zoom combo accepts either a fit mode
+        (<strong>Fit Width</strong>, <strong>Fit Page</strong>, <strong>Actual Size</strong>) or a
+        percentage (25 – 1600%). Fit Width is the default on open. <strong>Actual Size</strong>
+        (100%) means the true physical size — an A4 page displays at ~8.3&nbsp;× 11.7&nbsp;inches
+        on screen. The same modes are also under <strong>View →&nbsp;Fit Width / Fit Page /
+        Actual Size</strong> (each shows a ✓ next to the active mode). Your choice is saved
+        per-user and restored on next launch.</li>
+      <li><strong>Zoom keyboard.</strong> <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd>
+        bump the custom percentage. <kbd>Ctrl</kbd>+<kbd>0</kbd> resets to Actual Size.</li>
       <li><strong>Thumbnail sidebar (left).</strong> Click a thumbnail to jump; scrolling the main view updates the highlight.</li>
       <li><strong>Page number box.</strong> Type any page number and press Enter to jump.</li>
       <li><strong>Prev / Next page.</strong> Toolbar buttons or keyboard.</li>
@@ -323,39 +334,80 @@
     <p>The default tool. Click any annotation to select it — a dashed blue outline appears with
       resize handles on the right / bottom / bottom-right corners. Drag to move, drag a handle to
       resize, <kbd>Delete</kbd> to remove, <kbd>F2</kbd> or <kbd>Enter</kbd> to edit text/notes.</p>
+    <p><strong>Drag on empty space</strong> to region-select source PDF text — same behaviour as
+      the <a href="#tool-seltext">Sel&nbsp;Text</a> tool. On release you get the Copy / Replace /
+      Translate menu.</p>
 
     <h3 id="tool-highlight">Highlight <span class="glyph">Aa</span></h3>
     <p>Drag to paint a transparent colour block over text. The current colour applies.</p>
 
     <h3 id="tool-note">Sticky Note</h3>
-    <p>Click anywhere on a page; a dialog asks for note text. On OK, a post-it style rectangle
-      appears where you clicked, and the tool auto-reverts to <strong>Select</strong> with the new
-      note selected so you can drag it or edit it further. On Cancel, the tool stays armed.</p>
+    <p>Click anywhere on a page; the same rich Text dialog used by <a href="#tool-text">Text
+      stamps</a> opens — set text, font family, size, weight (Regular / Medium / SemiBold /
+      Bold), italic, underline, alignment, text colour, and background colour (defaults to
+      yellow; pick <strong>None</strong> for transparent). On OK, a post-it style rectangle
+      appears where you clicked, and the tool auto-reverts to <strong>Select</strong> with the
+      new note selected so you can drag it or edit it further. On Cancel, the tool stays armed.
+      Double-click an existing note to re-open the same dialog.</p>
     <div class="tip"><strong>Save behaviour:</strong> sticky notes remain as native PDF text
-      annotations after Save — any PDF viewer will show them as note icons.</div>
+      annotations after Save — any PDF viewer will show them as note icons. All styling (text
+      colour, font, size, weight, italic, underline, alignment, background) is preserved via
+      marker keys and re-materialises as an editable note when you reopen the file.</div>
 
     <h3 id="tool-text">Text</h3>
-    <p>Click anywhere on a page; a dialog opens for the text, font family, size, bold / italic /
-      underline, alignment, and colour. On OK, the stamp is dropped, the tool auto-reverts to
-      Select, and the new stamp is selected.</p>
-    <p>The next time you open the Text dialog, it opens pre-filled with your <strong>last-used
-      font, size, and style settings</strong>. Double-clicking an existing stamp still opens its
-      own settings — so you can't accidentally reformat a heading you set to Times 22.</p>
+    <p>The Text tool lives inside the toolbar's <strong>Text&nbsp;▾</strong> split-button (which
+      also holds Tickmark, Crossmark, and Bullet — the button remembers whichever variant you
+      picked last so a single click drops the same kind).</p>
+    <p>Click on a page and a dialog opens for:</p>
+    <ul>
+      <li>Text (multi-line)</li>
+      <li>Font family (every font installed on Windows)</li>
+      <li>Size (points; snap-list + free-type)</li>
+      <li><strong>Weight</strong> — Regular (400), Medium (500), SemiBold (600), Bold (700)</li>
+      <li>Italic, Underline</li>
+      <li>Alignment — Left / Center / Right / Justify</li>
+      <li>Text colour</li>
+      <li><strong>Background colour</strong> — pick a swatch, hex value, or click <strong>None</strong> for transparent (the default for text stamps)</li>
+    </ul>
+    <p>On OK, the stamp is dropped, the tool auto-reverts to Select, and the new stamp is selected.
+      The next time you open the Text dialog for a <em>new</em> stamp it pre-fills with your
+      last-used font, size, weight, and alignment. Double-clicking an existing stamp reopens
+      <em>its</em> own settings, so you can't accidentally reformat a heading you set to Times 22.</p>
+    <div class="note">
+      <strong>Fine weights on save.</strong> The overlay preview renders Medium and SemiBold at
+      their exact weight. On Save, PdfSharpCore's font model only has Regular / Bold — Medium
+      and SemiBold both flatten as Bold; Regular flattens as Regular.
+    </div>
 
-    <h3 id="tool-tick">Tick (✓) &amp; X (✗)</h3>
-    <p>One-shot tools for filling scanned checkboxes on forms. Click on a checkbox — a bold
-      symbol drops at that point in the current colour. The tool auto-reverts to Select and the
-      mark is selected, ready to drag or resize.</p>
-    <p>These marks are just single-glyph text stamps under the hood. Double-click one to change
-      the size, font, or colour via the Text dialog.</p>
+    <h3 id="tool-callout">Callout</h3>
+    <p>Callout is also on the <strong>Text&nbsp;▾</strong> split-button. Click the point you want
+      to call out (the arrow tip); the same Text dialog opens for the callout box. On OK you get
+      an editable box + a leader line + an arrowhead pointing at the click. Drag the box or the
+      anchor handle independently (or drag them together with Select). Double-click to re-edit.</p>
+    <p>Callouts save as native PDF <code>/FreeText</code> annotations with a <code>/IT
+      /FreeTextCallout</code> intent, so Acrobat, Chrome, and Foxit all render them as real
+      callouts. An <code>/ArtiMaxCallout</code> marker key preserves the exact text colour and
+      background so the callout returns as an editable overlay when you reopen the file.</p>
+
+    <h3 id="tool-tick">Tick (✓), X (✗) &amp; Bullet (•)</h3>
+    <p>Three one-shot mark tools grouped on the <strong>Text&nbsp;▾</strong> split-button (below
+      the Text and Callout entries). Ideal for filling scanned checkboxes and list forms. Click on
+      the spot — a bold symbol drops at that point in the current colour. Unlike Text and Callout,
+      these tools <em>stay armed</em> so you can drop several marks in a row without going back
+      to the toolbar.</p>
+    <p>These marks are single-glyph text stamps under the hood. Double-click one to change size,
+      font, or colour via the Text dialog.</p>
 
     <h3 id="tool-draw">Draw (ink)</h3>
     <p>Freehand drawing. Drag on a page to lay down a stroke in the current colour and thickness.
       Multiple strokes are separate annotations — pick each one with Select, delete or drag as
       needed.</p>
 
-    <h3 id="tool-rect">Rectangle / Oval</h3>
-    <p>Drag to draw an outlined shape. Colour and thickness follow the current colour swatch.</p>
+    <h3 id="tool-rect">Rectangle / Oval (outlined or filled)</h3>
+    <p>Rectangle, Rectangle Filled, Ellipse, and Ellipse Filled all live on the toolbar's
+      <strong>Shape&nbsp;▾</strong> split-button (which also holds Draw). Pick a variant; the
+      button remembers your last choice for one-click reuse. Drag to draw the shape at the
+      current colour and thickness. Filled variants ignore thickness and paint the interior.</p>
 
     <h3 id="tool-whiteout">Whiteout</h3>
     <p>Drag to cover an area with a solid white box. Useful for hiding a piece of text before
@@ -377,13 +429,20 @@
       annotations become part of the PDF and you'd need Undo).</p>
 
     <h3 id="tool-seltext">Select Text (region)</h3>
-    <p>Drag over any block of text. A menu offers:</p>
+    <p>Drag over any block of text — with either the <strong>Sel&nbsp;Text</strong> tool or the
+      normal <strong>Select</strong> tool on empty space. A menu offers:</p>
     <ul>
       <li><strong>Copy</strong> — puts the text on the clipboard.</li>
-      <li><strong>Replace</strong> — whites out the region and opens the Text dialog pre-filled with
-        the source text. Your <em>last-used</em> font, size, and style are applied (not the source's),
-        so consecutive replaces stay consistent. Change to the source font by picking it in the
-        dialog if you need it to match surrounding type.</li>
+      <li><strong>Replace</strong> — whites out the region and opens the Text dialog pre-filled
+        with the source text AND the source's detected font family, size, weight, italic, and
+        bold. Font names get normalised to their Windows equivalents where needed
+        (LiberationSans → Arial, DejaVuSans → Arial, etc.). The status bar shows the
+        detection details (reported vs glyph-derived point size). Underline, alignment,
+        and colour default to neutral values (off / left / black) because those aren't
+        reliably per-glyph. Your toolbar's remembered font is <em>not</em> touched by
+        Replace — it only changes when you create new text.</li>
+      <li><strong>Translate</strong> — sends the region text to the MyMemory translation
+        service. See <a href="#translate">Translate</a>.</li>
     </ul>
     <div class="tip">This is the "click a word, change it" workflow — a controlled substitute for
       Acrobat's inline-text edit, without the commercial licence trap.</div>
@@ -394,6 +453,16 @@
       <li><strong>Copy</strong> — puts the region on the clipboard as a raster image.</li>
       <li><strong>Save PNG</strong> — writes the region to a .png file.</li>
     </ul>
+
+    <h3 id="tool-colour">Colour picker (toolbar)</h3>
+    <p>The <strong>Colour:&nbsp;[swatch]&nbsp;▾</strong> block on the toolbar is a drop-down.
+      Click the label, the swatch, or the chevron:</p>
+    <ul>
+      <li>A palette of 12 common annotation colours drops down. Click one to set it as the
+        current colour for all new annotations.</li>
+      <li><strong>More Colours…</strong> at the bottom opens the full colour picker.</li>
+    </ul>
+    <p>The current colour is saved per-user and restored on next launch.</p>
 
     <hr>
 
@@ -455,25 +524,44 @@
     </ol>
 
     <h2 id="ocr">OCR</h2>
-    <p>Uses Tesseract. Needs a training-data file (<code>eng.traineddata</code>, ~22 MB)
-      installed alongside the exe at <code>tessdata\eng.traineddata</code>. You have two
-      ways to get it:</p>
+    <p>Uses Tesseract. Each language needs a training-data file (e.g.
+      <code>eng.traineddata</code>, ~22 MB) installed alongside the exe at
+      <code>tessdata\&lt;lang&gt;.traineddata</code>.</p>
+    <p><strong>Tools → OCR Languages</strong> is a submenu listing 14 common languages
+      (English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Russian,
+      Chinese Simplified &amp; Traditional, Japanese, Korean, Arabic). Each row shows a
+      ✓ next to the current language plus <em>(current)</em> or <em>(installed)</em> in
+      the label.</p>
     <ul>
-      <li><strong>Tools → Download OCR Training Data (English)…</strong> — one-click
-        download from the official GitHub repo, straight into the app folder.</li>
-      <li>Or first-time you invoke any OCR command without the file, the app offers
-        the same download.</li>
-      <li>Or manual: grab <code>eng.traineddata</code> from
+      <li>Click an <strong>uninstalled</strong> language → prompt to download from the
+        official GitHub repo straight into <code>tessdata\</code>. On success it becomes
+        the new current language.</li>
+      <li>Click an <strong>installed</strong> language → set as current. Subsequent OCR
+        commands use this language.</li>
+      <li>The current language is saved per-user and restored on next launch.</li>
+      <li>The first time you invoke any OCR command without the current language
+        installed, the app offers to download it for you.</li>
+      <li>Manual install: drop any <code>&lt;lang&gt;.traineddata</code> file from
         <a href="https://github.com/tesseract-ocr/tessdata">github.com/tesseract-ocr/tessdata</a>
-        and drop it in <code>tessdata\</code> next to <code>PDFEditor.exe</code>.</li>
+        into <code>tessdata\</code> next to <code>PDFEditor.exe</code>.</li>
     </ul>
     <p>Then:</p>
     <ul>
       <li><strong>OCR Current Page</strong> — writes recognised text to the extract panel.</li>
-      <li><strong>OCR All Pages → text file</strong> — batch-OCR everything and save to a .txt file.</li>
+      <li><strong>OCR All Pages → text file</strong> — batch-OCR everything and save to a .txt
+        file (the PDF itself is left untouched).</li>
       <li><strong>Make Searchable PDF (OCR)…</strong> — rasterises each page and lays down an
-        invisible text layer over it. The result looks identical but is searchable/copyable.</li>
+        invisible text layer over it. Runs in-place: the OCR output loads back into memory
+        (Ctrl+Z reversible), then <kbd>Ctrl</kbd>+<kbd>S</kbd> overwrites the original file.
+        The result looks identical but is searchable / text-selectable in any viewer.</li>
     </ul>
+    <div class="note">
+      Make Searchable PDF guards against running on a vector text PDF: if the majority of
+      pages already have &ge;100 chars of embedded text, you get a warning before the
+      rasterise-and-re-OCR step, because that would replace the accurate embedded text with
+      less-accurate OCR output. Continue at your own discretion, or open a clean scan
+      instead.
+    </div>
 
     <h2 id="translate">Translate</h2>
     <p>Sends text to <a href="https://mymemory.translated.net">MyMemory</a>, a free
@@ -503,8 +591,13 @@
 
     <h2 id="overlays">Watermarks, headers &amp; footers, Bates numbering</h2>
     <ul>
-      <li><strong>Add Watermark…</strong> — set text, size, colour, opacity, and angle. Applied to
-        every page.</li>
+      <li><strong>Tools →&nbsp;Watermark…</strong> opens the Watermark manager. It lists every
+        watermark the app has previously applied to the current document with per-row
+        <strong>Edit</strong> and <strong>Delete</strong> buttons; the same dialog has a form
+        below the list for adding a new one (text, size, colour, opacity, angle). Edit / Delete
+        rewind the app's undo stack to just before that watermark was added — clean, no
+        opaque-white overpaint. Once a watermark is baked in beyond the undo horizon (save +
+        close + reopen), the row shows <em>baked in</em> and the buttons disappear.</li>
       <li><strong>Add Headers &amp; Footers…</strong> — six positions (three across the top, three
         across the bottom). Supports placeholders <code>{page}</code>, <code>{total}</code>,
         <code>{date}</code>, <code>{filename}</code>.</li>
@@ -535,6 +628,19 @@
     <p><strong>Tools → Compare with another PDF…</strong> — opens a side-by-side viewer with the
       current document on the left and the picked file on the right, plus a per-page text-diff
       summary in the middle.</p>
+
+    <h2 id="clear-annotations">Clear Annotations</h2>
+    <p><strong>Tools → Clear Annotations…</strong> removes unsaved overlay annotations
+      (Notes, Callouts, Text stamps, Ticks, Highlights, Ink, Rects, Ovals, Whiteouts).
+      A dialog offers <strong>Current page</strong> or <strong>All pages</strong>. Either
+      is undoable via <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+
+    <h2 id="history">Edit history</h2>
+    <p><strong>Edit → Edit History…</strong> shows every byte-level operation on this
+      session's undo stack (watermarks, page ops, security, save-flatten, etc.) with a
+      human-readable label. Select a row and click <strong>Revert to before selected</strong>
+      to rewind the document to just before that operation. Overlay annotations are
+      preserved across the rewind.</p>
 
     <hr>
 
@@ -573,16 +679,33 @@
       quietly removes it. Use <strong>Clear Recent</strong> to reset the list.</p>
 
     <h2 id="undo">Undo</h2>
-    <p><kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes both overlay annotation changes (create, edit, Replace) and
-      PDF-byte changes (watermark, Bates, page ops, security). Overlay undos are prioritised first
-      — they don't touch the underlying PDF, so they're free.</p>
+    <p><kbd>Ctrl</kbd>+<kbd>Z</kbd> reverses:</p>
+    <ul>
+      <li><strong>Every kind of overlay annotation you can add</strong> — Whiteout,
+        Rectangle, Ellipse (outlined or filled), Ink, Highlight, Sticky Note, Callout,
+        Text Stamp, and the Tick / X / Bullet marks. One press = one annotation gone.</li>
+      <li><strong>PDF-byte changes</strong> — watermark, headers &amp; footers, Bates,
+        page ops (rotate, delete, insert, extract, split, organise, crop), security
+        (password protect, remove protection, sanitize metadata), and the save-flatten step.</li>
+      <li><strong>Clear Annotations</strong> and <strong>Text Replace</strong> (whiteout +
+        text stamp) as single operations.</li>
+    </ul>
+    <p>Overlay undos are prioritised first — they don't touch the underlying PDF, so
+      they're free. The byte-level undo history is capped at 20 entries; view or rewind
+      to any point via <a href="#history">Edit History</a>.</p>
 
     <h2 id="saving">Save behaviour</h2>
     <ul>
       <li><strong>File → Save</strong> (<kbd>Ctrl</kbd>+<kbd>S</kbd>) writes overlay annotations
-        into the PDF and saves back to the original path. Sticky notes are preserved as native
-        PDF text annotations; everything else is flattened.</li>
-      <li><strong>File → Save As…</strong> writes to a new file.</li>
+        into the PDF and saves back to the original path. Sticky notes and Callouts are
+        preserved as native PDF <code>/Text</code> and <code>/FreeText</code> annotations
+        (with marker keys so they round-trip back as editable overlays on next open);
+        everything else is flattened.</li>
+      <li><strong>File → Save As…</strong> writes to a new file. The new filename is added to
+        the Recent Files list.</li>
+      <li><strong>File in use.</strong> If Save fails because another app is holding the file
+        open (Chrome, Acrobat, etc.), you're offered <em>Yes / No</em>: Yes retries after you
+        close the other app; No keeps your changes in memory so you can retry manually.</li>
       <li><strong>Opening / closing / dropping a new file</strong> while there are unsaved
         changes prompts you to <em>Save / Discard / Cancel</em>. Cancel aborts the transition.</li>
       <li><strong>Print</strong> renders the PDF to the printer at 200 DPI. If the document
@@ -622,9 +745,12 @@
         <code>tessdata\eng.traineddata</code> next to the executable — see <a href="#ocr">OCR</a>.</li>
       <li><strong>Word / Excel conversions</strong> use COM automation and require the
         corresponding Office app installed. Falls back to text-only when not.</li>
-      <li><strong>Font retention.</strong> The Text dialog remembers the last font family, size,
-        bold/italic/underline, and alignment across text stamps and Select-Text → Replace.
-        Double-clicking an existing stamp still uses that stamp's own settings.</li>
+      <li><strong>Font retention for new text.</strong> The Text dialog remembers the last
+        font family, size, weight, italic, underline, and alignment across new text stamps,
+        sticky notes, and callouts. Double-clicking an existing stamp still uses that
+        stamp's own settings. <strong>Select-Text → Replace</strong> ignores your remembered
+        toolbar settings — it reads the source glyphs' font, size, weight, and italic straight
+        from the PDF so the replacement matches the surrounding type.</li>
     </ul>
 
     <h2 id="about">About &amp; licences</h2>
