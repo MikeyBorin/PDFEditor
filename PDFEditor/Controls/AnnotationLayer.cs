@@ -598,8 +598,22 @@ public class AnnotationLayer : Canvas
                     return;
                 }
             }
-            // Click on empty space → deselect
+            // Empty-space click. Deselect, then start a drag-region draft
+            // (same shape as SelectText). If the user releases without moving
+            // the mouse, OnMouseUp's minSize check discards the draft — plain
+            // click still just deselects. A real drag hands off to the source-
+            // text extract flow (same handler as the Sel Text button).
             MainVM.SelectedAnnotation = null;
+            _dragStart = pos;
+            _drafting = new PdfAnnotation
+            {
+                PageIndex = Page.PageIndex,
+                Kind = AnnotationKind.Rectangle,   // draft preview only
+                X = nx, Y = ny, Width = 0, Height = 0,
+                Color = System.Windows.Media.Colors.DodgerBlue,
+                StrokeThickness = MainVM.CurrentThickness
+            };
+            CaptureMouse();
             Rebuild();
             return;
         }
@@ -896,14 +910,20 @@ public class AnnotationLayer : Canvas
         _draftingVisual = null;
 
         // Special tools consume the draft rectangle instead of committing it as an annotation.
+        // Select-tool drag falls in here too: a real drag runs the SelectText action
+        // (extract source text, offer copy / replace); a plain click has ok=false
+        // and just clears the draft, leaving the empty-space deselect from OnMouseDown.
         var currentTool = MainVM?.CurrentTool;
-        if (currentTool == ToolMode.SelectText || currentTool == ToolMode.SelectImage)
+        if (currentTool == ToolMode.SelectText
+            || currentTool == ToolMode.SelectImage
+            || currentTool == ToolMode.Select)
         {
             if (ok)
             {
                 var region = (_drafting.X, _drafting.Y, _drafting.Width, _drafting.Height);
                 var pageIdx = Page!.PageIndex;
-                var kind = currentTool.Value;
+                // Select-tool drag reuses the SelectText action.
+                var kind = currentTool.Value == ToolMode.Select ? ToolMode.SelectText : currentTool.Value;
                 _drafting = null;
                 Rebuild();
                 Dispatcher.BeginInvoke(new System.Action(() => InvokeRegionAction(pageIdx, region, kind)),
