@@ -15,6 +15,12 @@ public class ViewSettings
     /// swatch in the toolbar reopens on next launch showing the colour the user
     /// finished with.</summary>
     public string CurrentColorHex { get; set; } = "#000000";
+
+    /// <summary>Tesseract language code for OCR (e.g. "eng", "fra"). Used by
+    /// Run OCR / OCR All Pages / Make Searchable PDF. User picks from the
+    /// "OCR Languages" submenu — installing a language and setting it as
+    /// current in one click.</summary>
+    public string OcrLanguage { get; set; } = "eng";
 }
 
 /// <summary>Persists user's zoom-mode preference across app runs. JSON in

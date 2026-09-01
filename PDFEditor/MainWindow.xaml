@@ -89,7 +89,18 @@
                 <MenuItem Header="OCR Current Page" Command="{Binding RunOcrOnCurrentCommand}"/>
                 <MenuItem Header="OCR All Pages → text file..." Command="{Binding OcrAllPagesCommand}"/>
                 <MenuItem Header="Make Searchable PDF (OCR)..." Command="{Binding MakeSearchablePdfCommand}"/>
-                <MenuItem Header="_Download OCR Training Data (English)..." Command="{Binding DownloadOcrDataDefaultCommand}" ToolTip="Downloads eng.traineddata (~22 MB) from GitHub and installs it into the app's tessdata folder."/>
+                <MenuItem Header="OCR _Languages" ItemsSource="{Binding OcrLanguages}"
+                          ToolTip="Pick the language OCR uses. Downloads training data (~22 MB) from GitHub on first use of each language.">
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
+                            <Setter Property="Header" Value="{Binding Header}"/>
+                            <Setter Property="IsCheckable" Value="True"/>
+                            <Setter Property="IsChecked" Value="{Binding IsCurrent, Mode=OneWay}"/>
+                            <Setter Property="Command" Value="{Binding DataContext.SelectOcrLanguageCommand, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Window}}}"/>
+                            <Setter Property="CommandParameter" Value="{Binding Code}"/>
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                </MenuItem>
                 <Separator/>
                 <MenuItem Header="_Translate..." Command="{Binding TranslateCommand}" ToolTip="Translate extracted text via MyMemory (free public API, no signup)"/>
                 <Separator/>

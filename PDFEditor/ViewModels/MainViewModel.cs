@@ -41,6 +41,64 @@ public partial class MainViewModel : ObservableObject
     public ThemeService Theme { get; } = new();
     public ViewSettingsService ViewSettings { get; } = new();
 
+    // Tesseract language codes + display names. Keep the list small and
+    // Western-focused for now — user can hand-drop other .traineddata files
+    // into the tessdata folder if they need something exotic.
+    public ObservableCollection<OcrLanguageItem> OcrLanguages { get; } = new()
+    {
+        new("eng",     "English"),
+        new("fra",     "French"),
+        new("deu",     "German"),
+        new("spa",     "Spanish"),
+        new("ita",     "Italian"),
+        new("por",     "Portuguese"),
+        new("nld",     "Dutch"),
+        new("pol",     "Polish"),
+        new("rus",     "Russian"),
+        new("chi_sim", "Chinese (Simplified)"),
+        new("chi_tra", "Chinese (Traditional)"),
+        new("jpn",     "Japanese"),
+        new("kor",     "Korean"),
+        new("ara",     "Arabic"),
+    };
+
+    /// <summary>Refresh the IsInstalled / IsCurrent flags on every language row
+    /// so the "OCR Languages" submenu shows the correct ticks/labels.</summary>
+    private void RefreshOcrLanguages()
+    {
+        var current = ViewSettings.Settings.OcrLanguage;
+        foreach (var lang in OcrLanguages)
+        {
+            lang.IsInstalled = _tessDownload.IsInstalled(lang.Code);
+            lang.IsCurrent   = string.Equals(lang.Code, current, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>Called from the OCR Languages submenu. If the language is
+    /// installed, just mark it current. If not, prompt to download; on
+    /// success, mark it current.</summary>
+    [RelayCommand]
+    private async Task SelectOcrLanguage(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+        if (!_tessDownload.IsInstalled(code))
+        {
+            var display = OcrLanguages.FirstOrDefault(l => l.Code == code)?.DisplayName ?? code;
+            var choice = MessageBox.Show(
+                $"{display} ({code}.traineddata) isn't installed yet.\n\n" +
+                "Download it now?  (~22 MB from github.com/tesseract-ocr/tessdata)",
+                "OCR language",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes) return;
+            await DownloadOcrData(code);
+            if (!_tessDownload.IsInstalled(code)) return;   // download failed / cancelled
+        }
+        ViewSettings.Settings.OcrLanguage = code;
+        ViewSettings.Save();
+        RefreshOcrLanguages();
+        StatusText = $"OCR language set to {OcrLanguages.FirstOrDefault(l => l.Code == code)?.DisplayName ?? code}.";
+    }
+
     [RelayCommand]
     private void SetTheme(string themeName)
     {
@@ -355,6 +413,7 @@ public partial class MainViewModel : ObservableObject
             currentColor = c;
         }
         catch { }
+        RefreshOcrLanguages();
     }
 
     private void RefreshRecents()
@@ -1028,10 +1087,12 @@ public partial class MainViewModel : ObservableObject
     /// is available afterwards (either already-installed, or freshly-downloaded).</summary>
     private async Task<bool> PromptDownloadOcrDataAsync()
     {
-        if (_ocr.IsAvailable) return true;
+        var lang = ViewSettings.Settings.OcrLanguage;
+        if (_ocr.IsLanguageInstalled(lang)) return true;
 
+        var display = OcrLanguages.FirstOrDefault(l => l.Code == lang)?.DisplayName ?? lang;
         var choice = MessageBox.Show(
-            "OCR training data (eng.traineddata) is not installed.\n\n" +
+            $"OCR training data for {display} ({lang}.traineddata) is not installed.\n\n" +
             "Would you like to download it now?\n\n" +
             "Source: github.com/tesseract-ocr/tessdata\n" +
             "Size: ~22 MB\n" +
@@ -1040,8 +1101,8 @@ public partial class MainViewModel : ObservableObject
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (choice != MessageBoxResult.Yes) return false;
 
-        await DownloadOcrData("eng");
-        return _ocr.IsAvailable;
+        await DownloadOcrData(lang);
+        return _ocr.IsLanguageInstalled(lang);
     }
 
     [RelayCommand]
@@ -1080,6 +1141,7 @@ public partial class MainViewModel : ObservableObject
             RunOcrOnCurrentCommand.NotifyCanExecuteChanged();
             OcrAllPagesCommand.NotifyCanExecuteChanged();
             MakeSearchablePdfCommand.NotifyCanExecuteChanged();
+            RefreshOcrLanguages();
             MessageBox.Show(
                 $"Installed {languageCode}.traineddata at:\n{_tessDownload.DestinationPath(languageCode)}\n\nOCR is now available under Tools → OCR.",
                 "Download complete", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1104,9 +1166,10 @@ public partial class MainViewModel : ObservableObject
         if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
         IsBusy = true;
         var idx = CurrentPage.PageIndex;
-        var text = await Task.Run(() => _ocr.OcrPage(_doc.Bytes!, idx));
-        ExtractedText = $"--- OCR Page {idx + 1} ---\n{text}";
-        StatusText = $"OCR done on page {idx + 1}.";
+        var lang = ViewSettings.Settings.OcrLanguage;
+        var text = await Task.Run(() => _ocr.OcrPage(_doc.Bytes!, idx, language: lang));
+        ExtractedText = $"--- OCR Page {idx + 1} ({lang}) ---\n{text}";
+        StatusText = $"OCR done on page {idx + 1} ({lang}).";
         IsBusy = false;
     }
 
@@ -1293,19 +1356,23 @@ public partial class MainViewModel : ObservableObject
         var page = Pages.ElementAtOrDefault(pageIndex);
         if (page is null) return;
 
-        // Pre-fill dialog with the source TEXT, but use last-used font settings — the user
-        // has usually established a preferred font for this session and wants it applied
-        // consistently. Source-detected family/size was noisy anyway.
-        var hex = "#" + CurrentColor.R.ToString("X2") + CurrentColor.G.ToString("X2") + CurrentColor.B.ToString("X2");
+        // Replacement flow: pre-fill the dialog purely from the source glyphs. The
+        // toolbar's CurrentFontFamily / CurrentFontSize / CurrentBold / CurrentItalic /
+        // CurrentUnderline / CurrentAlign / CurrentColor exist for CREATING new text and
+        // must NOT leak into a replacement (that would silently override the source's
+        // formatting). Use plain neutral defaults for fields we can't detect (colour is
+        // black; underline/align default to their natural values).
+        var detectedFont = string.IsNullOrWhiteSpace(region.FontFamily) ? "Arial" : region.FontFamily;
+        var detectedSize = region.FontPointSize > 1 && region.FontPointSize < 400 ? region.FontPointSize : 12.0;
         var r = Controls.TextStampDialog.Show(
             defaultText: region.Text,
-            defaultFont: CurrentFontFamily,
-            defaultSize: CurrentFontSize,
-            defaultBold: CurrentBold,
-            defaultItalic: CurrentItalic,
-            defaultUnderline: CurrentUnderline,
-            defaultColorHex: hex,
-            defaultAlign: CurrentAlign,
+            defaultFont: detectedFont,
+            defaultSize: detectedSize,
+            defaultBold: region.Bold,
+            defaultItalic: region.Italic,
+            defaultUnderline: false,
+            defaultColorHex: "#000000",
+            defaultAlign: PDFEditor.Models.TextAlign.Left,
             defaultBackgroundHex: null);
         if (r is null) return;
         try
@@ -1340,7 +1407,10 @@ public partial class MainViewModel : ObservableObject
             page.Annotations.Add(stamp);
             SelectedAnnotation = stamp;
             CurrentTool = ToolMode.Select;
-            RememberFontChoice(r);
+            // Intentionally do NOT RememberFontChoice(r) — the picked font came from
+            // the source text being replaced, not a user preference. Overwriting the
+            // toolbar defaults from a replace flow would silently change what the
+            // Text / Sticky Note / Callout tools do next time.
             // Register undo: remove both annotations we just added.
             PushAnnotationUndo(() =>
             {
@@ -1752,10 +1822,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             IsBusy = true;
-            var text = await Task.Run(() => _ocr.OcrAllPages(_doc.Bytes!));
+            var lang = ViewSettings.Settings.OcrLanguage;
+            var text = await Task.Run(() => _ocr.OcrAllPages(_doc.Bytes!, language: lang));
             await File.WriteAllTextAsync(dlg.FileName, text);
             ExtractedText = text;
-            StatusText = $"OCR complete for {_doc.PageCount} pages → {Path.GetFileName(dlg.FileName)}.";
+            StatusText = $"OCR complete for {_doc.PageCount} pages ({lang}) → {Path.GetFileName(dlg.FileName)}.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "OCR failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { IsBusy = false; }
@@ -1766,14 +1837,59 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null) return;
         if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
-        var dlg = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = Path.GetFileNameWithoutExtension(_doc.FilePath ?? "document") + "-searchable.pdf" };
-        if (dlg.ShowDialog() != true) return;
+
+        // Guard: refuse to OCR a PDF that already has embedded text. Running
+        // Tesseract on a vector PDF rasterises every page — you lose vector
+        // fidelity and replace the accurate embedded text with less-accurate
+        // OCR output.
+        //
+        // Heuristic: count how many pages carry "real" text (≥100 non-whitespace
+        // chars). If MOST pages have real text, warn — the doc is likely a
+        // vector PDF. If most pages are text-poor, treat as a scan and proceed
+        // silently. A scanned contract with a couple of embedded signature or
+        // form-field lines shouldn't trip the warning.
+        try
+        {
+            var bytes = _doc.Bytes!;
+            var pageCount = _doc.PageCount;
+            const int PerPageThreshold = 100;
+            int textRich = await Task.Run(() =>
+            {
+                int rich = 0;
+                for (int i = 0; i < pageCount; i++)
+                {
+                    var t = _extract.ExtractPageText(bytes, i) ?? "";
+                    int nonWs = 0;
+                    foreach (var c in t) if (!char.IsWhiteSpace(c)) nonWs++;
+                    if (nonWs >= PerPageThreshold) rich++;
+                }
+                return rich;
+            });
+            // Majority of pages are text-bearing → warn.
+            if (pageCount > 0 && textRich * 2 >= pageCount)
+            {
+                var proceed = MessageBox.Show(
+                    $"This PDF already has embedded text on {textRich} of {pageCount} pages. " +
+                    "OCR isn't needed and would replace the existing text/vector content " +
+                    "with a rasterised image and less-accurate OCR output.\n\n" +
+                    "Continue anyway?",
+                    "Make Searchable PDF",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+                if (proceed != MessageBoxResult.OK) return;
+            }
+        }
+        catch { /* if extract fails, treat as no-text and OCR ahead */ }
+
         try
         {
             IsBusy = true;
-            var bytes = await Task.Run(() => _ocr.BuildSearchablePdf(_doc.Bytes!));
-            await File.WriteAllBytesAsync(dlg.FileName, bytes);
-            StatusText = $"Searchable PDF written to {Path.GetFileName(dlg.FileName)}.";
+            var lang = ViewSettings.Settings.OcrLanguage;
+            var bytes = await Task.Run(() => _ocr.BuildSearchablePdf(_doc.Bytes!, language: lang));
+            // Route through the standard in-place pipeline: undo-able, marks
+            // dirty, next Ctrl+S overwrites the on-disk file.
+            await ApplyBytesPreservingOverlaysAsync(bytes, $"OCR — Make Searchable ({lang})");
+            StatusText = "Made searchable. Save (Ctrl+S) to overwrite the file.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Searchable PDF failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { IsBusy = false; }

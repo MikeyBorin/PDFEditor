@@ -294,6 +294,14 @@ public class AnnotationLayer : Canvas
         if (w <= 0 || h <= 0) return null;
         var brush = new SolidColorBrush(a.Color);
 
+        // The Canvas coordinate space is IMAGE-PIXELS (Border.Width = PixelWidth),
+        // but a.FontSize is semantically POINTS (that's what the flatten path in
+        // AnnotationService uses via XFont, and it's what the user sees in the
+        // TextStampDialog). Multiply by px-per-point when handing FontSize to a
+        // WPF TextBlock so the on-screen preview matches the flattened output and
+        // matches source PDF text at the same point size.
+        var pxPerPt = (MainVM?.RenderDpi ?? 150) / 72.0;
+
         switch (a.Kind)
         {
             case AnnotationKind.Highlight:
@@ -401,7 +409,7 @@ public class AnnotationLayer : Canvas
                     Text = a.Text ?? "",
                     TextWrapping = TextWrapping.Wrap,
                     Padding = new Thickness(6),
-                    FontSize = a.FontSize > 0 ? a.FontSize : 12,
+                    FontSize = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt,
                     FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
                     FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
                     FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
@@ -467,7 +475,7 @@ public class AnnotationLayer : Canvas
                         Text = a.Text ?? "",
                         TextWrapping = TextWrapping.Wrap,
                         Padding = new Thickness(6),
-                        FontSize = a.FontSize > 0 ? a.FontSize : 12,
+                        FontSize = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt,
                         FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
                         FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
                         FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
@@ -506,10 +514,11 @@ public class AnnotationLayer : Canvas
                     // Width from the annotation constrains wrap; if unset, use a sensible default.
                     var maxTextW = (a.Width > 0.001 ? a.Width : 0.4) * w;
                     // Clamp font size: WPF TextBlock throws on FontSize <= 0 or NaN/Infinity.
-                    var fs = a.FontSize > 0 && !double.IsNaN(a.FontSize) && !double.IsInfinity(a.FontSize)
+                    var pointSize = a.FontSize > 0 && !double.IsNaN(a.FontSize) && !double.IsInfinity(a.FontSize)
                         ? a.FontSize
-                        : System.Math.Max(10, a.Height * h);
-                    if (fs <= 0 || double.IsNaN(fs) || double.IsInfinity(fs)) fs = 14;
+                        : System.Math.Max(10, (a.Height * h) / pxPerPt);
+                    if (pointSize <= 0 || double.IsNaN(pointSize) || double.IsInfinity(pointSize)) pointSize = 14;
+                    var fs = pointSize * pxPerPt;
                     var tb = new TextBlock
                     {
                         Text = a.Text ?? "",

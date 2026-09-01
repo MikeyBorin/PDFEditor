@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using PDFtoImage;
 using PdfSharpCore.Drawing;
@@ -23,32 +24,37 @@ public class OcrService
         _tessDataPath = Path.Combine(AppContext.BaseDirectory, "tessdata");
     }
 
+    /// <summary>True if any Tesseract training data file is installed. Callers
+    /// that need a specific language should use <see cref="IsLanguageInstalled"/>.</summary>
     public bool IsAvailable => Directory.Exists(_tessDataPath) &&
-                               File.Exists(Path.Combine(_tessDataPath, "eng.traineddata"));
+                               Directory.EnumerateFiles(_tessDataPath, "*.traineddata").Any();
 
-    public string OcrPage(byte[] pdfBytes, int pageIndex, int dpi = 300)
+    public bool IsLanguageInstalled(string languageCode) =>
+        File.Exists(Path.Combine(_tessDataPath, $"{languageCode}.traineddata"));
+
+    public string OcrPage(byte[] pdfBytes, int pageIndex, int dpi = 300, string language = "eng")
     {
-        if (!IsAvailable)
-            return "[OCR unavailable] Place 'eng.traineddata' in the app's 'tessdata' folder.";
+        if (!IsLanguageInstalled(language))
+            return $"[OCR unavailable] Place '{language}.traineddata' in the app's 'tessdata' folder.";
 
         using var imgMs = new MemoryStream();
         Conversion.SavePng(imgMs, pdfBytes, page: pageIndex, options: new RenderOptions(Dpi: dpi));
         imgMs.Position = 0;
 
-        using var engine = new TesseractEngine(_tessDataPath, "eng", EngineMode.Default);
+        using var engine = new TesseractEngine(_tessDataPath, language, EngineMode.Default);
         using var img = Pix.LoadFromMemory(imgMs.ToArray());
         using var res = engine.Process(img);
         return res.GetText();
     }
 
-    public string OcrAllPages(byte[] pdfBytes, int dpi = 300, IProgress<int>? progress = null)
+    public string OcrAllPages(byte[] pdfBytes, int dpi = 300, IProgress<int>? progress = null, string language = "eng")
     {
-        if (!IsAvailable)
-            return "[OCR unavailable] Place 'eng.traineddata' in the app's 'tessdata' folder.";
+        if (!IsLanguageInstalled(language))
+            return $"[OCR unavailable] Place '{language}.traineddata' in the app's 'tessdata' folder.";
 
         var count = Conversion.GetPageCount(pdfBytes);
         var sb = new StringBuilder();
-        using var engine = new TesseractEngine(_tessDataPath, "eng", EngineMode.Default);
+        using var engine = new TesseractEngine(_tessDataPath, language, EngineMode.Default);
         for (int i = 0; i < count; i++)
         {
             using var imgMs = new MemoryStream();
@@ -67,13 +73,14 @@ public class OcrService
     /// Builds a searchable PDF: rasterizes each page, drops the image on a new page,
     /// then overlays OCR text at ~1pt with alpha=1/255 so it's invisible but selectable/searchable.
     /// </summary>
-    public byte[] BuildSearchablePdf(byte[] pdfBytes, int dpi = 200, IProgress<int>? progress = null)
+    public byte[] BuildSearchablePdf(byte[] pdfBytes, int dpi = 200, IProgress<int>? progress = null, string language = "eng")
     {
-        if (!IsAvailable) throw new InvalidOperationException("OCR unavailable — install tessdata/eng.traineddata.");
+        if (!IsLanguageInstalled(language))
+            throw new InvalidOperationException($"OCR unavailable — install tessdata/{language}.traineddata.");
 
         var count = Conversion.GetPageCount(pdfBytes);
         var dst = new PdfDocument();
-        using var engine = new TesseractEngine(_tessDataPath, "eng", EngineMode.Default);
+        using var engine = new TesseractEngine(_tessDataPath, language, EngineMode.Default);
 
         // Copy the source page sizes so overlay text lines up with the rendered image.
         using var srcMs = new MemoryStream(pdfBytes);

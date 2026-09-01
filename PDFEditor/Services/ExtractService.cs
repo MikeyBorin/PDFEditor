@@ -135,11 +135,29 @@ public class ExtractService
             derivedFromGlyph *= userUnit;
             derivedFromBBox *= userUnit;
 
-            // Bias toward the largest sane candidate. PdfPig sometimes reports scaled 1pt fonts,
-            // and being visually too small on-page is a worse outcome than being slightly too big.
-            var candidates = new[] { reportedMedian, derivedFromGlyph, derivedFromBBox }
-                .Where(v => v > 0.5 && v < 400).OrderByDescending(v => v).ToList();
-            if (candidates.Count > 0) pointSize = candidates[0];
+            // Trust the reported PointSize when it looks consistent AND agrees with what
+            // the actual glyph heights imply. PdfPig's reported size is normally the most
+            // accurate signal — it comes straight from the text-state /Tf font-size operator.
+            // But it's periodically wrong: some producers define fonts at 1pt and scale via
+            // the text matrix, so PdfPig reports "1pt" while the glyphs are drawn at 12pt.
+            //
+            // Consistency: all letters report within ~15% of each other (mixed sizes on the
+            //   same word suggests we're seeing a display artifact rather than a real size).
+            // Agreement: reported ~= derivedFromGlyph within 30% (the 1pt bug fails this hard).
+            bool reportedTrustworthy = false;
+            if (reported.Count > 0 && reportedMedian > 0)
+            {
+                double minR = reported[0], maxR = reported[^1];
+                bool consistent = maxR / System.Math.Max(minR, 0.001) < 1.15;
+                bool agreesWithGlyph = derivedFromGlyph > 0 &&
+                    System.Math.Abs(reportedMedian - derivedFromGlyph) / derivedFromGlyph < 0.30;
+                reportedTrustworthy = consistent && agreesWithGlyph;
+            }
+
+            if (reportedTrustworthy) pointSize = reportedMedian;
+            else if (derivedFromGlyph > 0.5 && derivedFromGlyph < 400) pointSize = derivedFromGlyph;
+            else if (derivedFromBBox  > 0.5 && derivedFromBBox  < 400) pointSize = derivedFromBBox;
+            else if (reportedMedian   > 0.5 && reportedMedian   < 400) pointSize = reportedMedian;
 
             // Majority font name.
             var rawName = letters.Select(l => l.FontName ?? "")
@@ -148,6 +166,30 @@ public class ExtractService
                                  .OrderByDescending(g => g.Count())
                                  .FirstOrDefault()?.Key ?? "";
             fontFamily = NormalizeFontName(rawName, out bold, out italic);
+
+            // Prefer PdfPig's FontDetails (IsBold / IsItalic / Weight) over the
+            // name-substring heuristic — it reads /FontDescriptor and glyph tables
+            // directly, so it catches weights that aren't encoded in the font name
+            // (e.g. Medium/Semibold/Black-weight faces stored as just "Arial").
+            // Majority vote across the sampled letters, weighted by Font.Weight.
+            try
+            {
+                int boldVotes = 0, italicVotes = 0, total = 0;
+                foreach (var l in letters)
+                {
+                    var f = l.Font;
+                    if (f == null) continue;
+                    total++;
+                    if (f.IsBold || f.Weight >= 500) boldVotes++;
+                    if (f.IsItalic) italicVotes++;
+                }
+                if (total > 0)
+                {
+                    if (boldVotes   * 2 >= total) bold = true;
+                    if (italicVotes * 2 >= total) italic = true;
+                }
+            }
+            catch { /* fall back to name-substring detection */ }
         }
 
         // For diagnostics — expose the three candidate calculations so the caller can display them.
@@ -186,14 +228,20 @@ public class ExtractService
         var rawLower = raw.ToLowerInvariant();
         bold = rawLower.Contains("bold") || rawLower.Contains("black") || rawLower.Contains("heavy");
         italic = rawLower.Contains("italic") || rawLower.Contains("oblique");
-        // Map a few common PDF names to Windows equivalents
+        // Map common PDF font names to their Windows equivalents. Liberation*, DejaVu*,
+        // Nimbus*, and FreeSans/Serif/Mono are metrically-compatible open-source
+        // substitutes shipped with Linux/OpenOffice — keeping them as-is would leave
+        // the user with a font family that isn't installed on Windows.
         return family switch
         {
-            "TimesNewRoman" or "TimesNewRomanPS" => "Times New Roman",
-            "CourierNew" or "CourierNewPS" => "Courier New",
-            "Helvetica" => "Arial",
+            "TimesNewRoman" or "TimesNewRomanPS"                             => "Times New Roman",
+            "CourierNew"    or "CourierNewPS"                                => "Courier New",
+            "Helvetica"     or "HelveticaNeue"                               => "Arial",
+            "LiberationSans"  or "DejaVuSans"      or "FreeSans"    or "NimbusSans" or "NimbusSanL"        => "Arial",
+            "LiberationSerif" or "DejaVuSerif"     or "FreeSerif"   or "NimbusRoman" or "NimbusRomN"       => "Times New Roman",
+            "LiberationMono"  or "DejaVuSansMono"  or "FreeMono"    or "NimbusMono"  or "NimbusMonL"       => "Courier New",
             "" => "Arial",
-            _ => family
+            _  => family
         };
     }
 
