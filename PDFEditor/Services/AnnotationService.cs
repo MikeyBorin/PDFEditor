@@ -134,7 +134,8 @@ public class AnnotationService
                             }
                             if (!string.IsNullOrEmpty(a.FontFamily)) underlying.SetString("/ArtiMaxNoteFont", a.FontFamily);
                             if (a.FontSize > 0) underlying.SetReal("/ArtiMaxNoteSize", a.FontSize);
-                            if (a.Bold)      underlying.SetBoolean("/ArtiMaxNoteBold", true);
+                            if (a.FontWeight != 400)  underlying.SetInteger("/ArtiMaxNoteWeight", a.FontWeight);
+                            if (a.Bold)               underlying.SetBoolean("/ArtiMaxNoteBold", true);   // legacy readers
                             if (a.Italic)    underlying.SetBoolean("/ArtiMaxNoteItalic", true);
                             if (a.Underline) underlying.SetBoolean("/ArtiMaxNoteUnderline", true);
                             underlying.SetName("/ArtiMaxNoteAlign", "/" + a.Align.ToString());
@@ -243,10 +244,15 @@ public class AnnotationService
                         {
                             var fam = string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily;
                             var size = a.FontSize > 0 ? a.FontSize : (a.Height * h > 8 ? a.Height * h : 14);
+                            // PdfSharpCore's XFontStyle is coarse — Regular / Bold / Italic
+                            // / BoldItalic. Medium (500) and SemiBold (600) collapse to Bold
+                            // on flatten because "slightly-heavier" is closer to Bold than
+                            // to Regular. Weights below 400 collapse to Regular.
+                            bool isBold = a.FontWeight >= 550;
                             var style = XFontStyle.Regular;
-                            if (a.Bold && a.Italic) style = XFontStyle.BoldItalic;
-                            else if (a.Bold) style = XFontStyle.Bold;
-                            else if (a.Italic) style = XFontStyle.Italic;
+                            if (isBold && a.Italic) style = XFontStyle.BoldItalic;
+                            else if (isBold)        style = XFontStyle.Bold;
+                            else if (a.Italic)      style = XFontStyle.Italic;
                             var font = new XFont(fam, size, style);
                             var lineHeight = font.GetHeight();
                             var maxW = (a.Width > 0.001 ? a.Width : 0.4) * w;
@@ -371,7 +377,13 @@ public class AnnotationService
                     }
                     var fam   = dict.Elements.GetString("/ArtiMaxNoteFont");
                     var fsize = dict.Elements.ContainsKey("/ArtiMaxNoteSize") ? dict.Elements.GetReal("/ArtiMaxNoteSize") : 12.0;
-                    var bold  = dict.Elements.GetBoolean("/ArtiMaxNoteBold");
+                    // Prefer explicit numeric weight; fall back to the legacy Bold bool for
+                    // notes saved before we introduced the fine-weight system.
+                    int weight = 400;
+                    if (dict.Elements.ContainsKey("/ArtiMaxNoteWeight"))
+                        weight = dict.Elements.GetInteger("/ArtiMaxNoteWeight");
+                    else if (dict.Elements.GetBoolean("/ArtiMaxNoteBold"))
+                        weight = 700;
                     var ital  = dict.Elements.GetBoolean("/ArtiMaxNoteItalic");
                     var uline = dict.Elements.GetBoolean("/ArtiMaxNoteUnderline");
                     var alignName = dict.Elements.GetName("/ArtiMaxNoteAlign");
@@ -395,7 +407,7 @@ public class AnnotationService
                         Color = noteColor,
                         FontFamily = string.IsNullOrEmpty(fam) ? "Arial" : fam,
                         FontSize = fsize > 0 ? fsize : 12,
-                        Bold = bold,
+                        FontWeight = weight,
                         Italic = ital,
                         Underline = uline,
                         Align = align,

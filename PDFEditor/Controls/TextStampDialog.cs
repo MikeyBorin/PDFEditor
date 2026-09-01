@@ -10,11 +10,12 @@ namespace PDFEditor.Controls;
 public static class TextStampDialog
 {
     /// <summary><see cref="BackgroundHex"/> null/empty means "no background"
-    /// (transparent).</summary>
-    public record Result(string Text, string FontFamily, double FontSize, bool Bold, bool Italic, bool Underline, string ColorHex, PDFEditor.Models.TextAlign Align, string? BackgroundHex);
+    /// (transparent). <see cref="FontWeight"/> is an OpenType-style weight
+    /// (400 Regular / 500 Medium / 600 SemiBold / 700 Bold).</summary>
+    public record Result(string Text, string FontFamily, double FontSize, int FontWeight, bool Italic, bool Underline, string ColorHex, PDFEditor.Models.TextAlign Align, string? BackgroundHex);
 
     public static Result? Show(string defaultText = "", string defaultFont = "Arial",
-                                double defaultSize = 14, bool defaultBold = false,
+                                double defaultSize = 14, int defaultFontWeight = 400,
                                 bool defaultItalic = false, bool defaultUnderline = false,
                                 string defaultColorHex = "#000000",
                                 PDFEditor.Models.TextAlign defaultAlign = PDFEditor.Models.TextAlign.Left,
@@ -130,12 +131,40 @@ public static class TextStampDialog
         bgRow.Children.Add(WithCol(bgNone, 4));
         root.Children.Add(WithRow(bgRow, 4));
 
-        // Row 5: bold/italic
+        // Row 5: weight / italic / underline / align
         var style = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-        var bold = new CheckBox { Content = "Bold", IsChecked = defaultBold, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
+        var weightLabel = new TextBlock { Text = "Weight:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+        var weightBox = new ComboBox
+        {
+            MinWidth = 110,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 16, 0),
+            ToolTip = "OpenType-style font weight. Medium / SemiBold flatten to Bold on save."
+        };
+        var weightOptions = new (string Label, int Value)[]
+        {
+            ("Regular",  400),
+            ("Medium",   500),
+            ("SemiBold", 600),
+            ("Bold",     700),
+        };
+        foreach (var (label, _) in weightOptions) weightBox.Items.Add(label);
+        var initialWeightLabel = weightOptions.MinBy(o => System.Math.Abs(o.Value - defaultFontWeight)).Label;
+        weightBox.SelectedItem = initialWeightLabel;
+
         var italic = new CheckBox { Content = "Italic", IsChecked = defaultItalic, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Center };
         var underline = new CheckBox { Content = "Underline", IsChecked = defaultUnderline, Margin = new Thickness(0, 0, 20, 0), VerticalAlignment = VerticalAlignment.Center };
-        style.Children.Add(bold); style.Children.Add(italic); style.Children.Add(underline);
+        style.Children.Add(weightLabel);
+        style.Children.Add(weightBox);
+        style.Children.Add(italic);
+        style.Children.Add(underline);
+
+        int SelectedFontWeight()
+        {
+            var label = weightBox.SelectedItem as string ?? "Regular";
+            foreach (var (l, v) in weightOptions) if (l == label) return v;
+            return 400;
+        }
 
         var alignLabel = new TextBlock { Text = "Align:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 6, 0) };
         var alignBox = new ComboBox { MinWidth = 90, VerticalAlignment = VerticalAlignment.Center };
@@ -178,7 +207,7 @@ public static class TextStampDialog
             var sizeText = size.Text;
             if (string.IsNullOrEmpty(sizeText) && size.SelectedItem is string ss) sizeText = ss;
             if (double.TryParse(sizeText, out var sz) && sz > 0) previewText.FontSize = sz;
-            previewText.FontWeight = bold.IsChecked == true ? FontWeights.Bold : FontWeights.Normal;
+            previewText.FontWeight = FontWeight.FromOpenTypeWeight(SelectedFontWeight());
             previewText.FontStyle = italic.IsChecked == true ? FontStyles.Italic : FontStyles.Normal;
             previewText.TextDecorations = underline.IsChecked == true ? TextDecorations.Underline : null;
             previewText.TextAlignment = (alignBox.SelectedItem as string) switch
@@ -212,7 +241,7 @@ public static class TextStampDialog
         size.KeyUp += (_, _) => UpdatePreview();
         font.SelectionChanged += (_, _) => UpdatePreview();
         font.LostFocus += (_, _) => UpdatePreview();
-        bold.Checked += (_, _) => UpdatePreview(); bold.Unchecked += (_, _) => UpdatePreview();
+        weightBox.SelectionChanged += (_, _) => UpdatePreview();
         italic.Checked += (_, _) => UpdatePreview(); italic.Unchecked += (_, _) => UpdatePreview();
         underline.Checked += (_, _) => UpdatePreview(); underline.Unchecked += (_, _) => UpdatePreview();
         alignBox.SelectionChanged += (_, _) => UpdatePreview();
@@ -259,7 +288,7 @@ public static class TextStampDialog
                 text.Text,
                 (font.SelectedItem as string) ?? font.Text ?? "Arial",
                 double.TryParse(size.Text, out var s) ? s : (size.SelectedItem is string ss && double.TryParse(ss, out var s2) ? s2 : defaultSize),
-                bold.IsChecked == true,
+                SelectedFontWeight(),
                 italic.IsChecked == true,
                 underline.IsChecked == true,
                 colorHex.Text,

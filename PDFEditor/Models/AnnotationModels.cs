@@ -46,7 +46,20 @@ public class PdfAnnotation
     public string? ImagePath { get; set; }
     public double FontSize { get; set; } = 14;
     public string FontFamily { get; set; } = "Arial";
-    public bool Bold { get; set; }
+    /// <summary>OpenType-style font weight. 400 = Regular, 500 = Medium,
+    /// 600 = SemiBold, 700 = Bold. Values &gt;= 550 flatten to PDF-level Bold
+    /// (PdfSharpCore's XFontStyle only knows Regular vs Bold; the WPF preview
+    /// picks up the exact weight via FontWeight.FromOpenTypeWeight).</summary>
+    public int FontWeight { get; set; } = 400;
+
+    /// <summary>Compat surface for older read-sites and marker-key round-trip.
+    /// True iff <see cref="FontWeight"/> is at least SemiBold (550). Setting it
+    /// snaps <see cref="FontWeight"/> to 400 or 700.</summary>
+    public bool Bold
+    {
+        get => FontWeight >= 550;
+        set => FontWeight = value ? 700 : 400;
+    }
     public bool Italic { get; set; }
     public bool Underline { get; set; }
     public TextAlign Align { get; set; } = TextAlign.Left;

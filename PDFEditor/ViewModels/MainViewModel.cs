@@ -283,7 +283,7 @@ public partial class MainViewModel : ObservableObject
     // reopens with your previous choice instead of resetting to Arial 14.
     [ObservableProperty] private string currentFontFamily = "Arial";
     [ObservableProperty] private double currentFontSize = 14;
-    [ObservableProperty] private bool currentBold;
+    [ObservableProperty] private int currentFontWeight = 400;
     [ObservableProperty] private bool currentItalic;
     [ObservableProperty] private bool currentUnderline;
     [ObservableProperty] private TextAlign currentAlign = TextAlign.Left;
@@ -294,7 +294,7 @@ public partial class MainViewModel : ObservableObject
         if (r is null) return;
         if (!string.IsNullOrWhiteSpace(r.FontFamily)) CurrentFontFamily = r.FontFamily;
         if (r.FontSize > 0 && !double.IsNaN(r.FontSize) && !double.IsInfinity(r.FontSize)) CurrentFontSize = r.FontSize;
-        CurrentBold = r.Bold;
+        if (r.FontWeight >= 100 && r.FontWeight <= 900) CurrentFontWeight = r.FontWeight;
         CurrentItalic = r.Italic;
         CurrentUnderline = r.Underline;
         CurrentAlign = r.Align;
@@ -1368,7 +1368,7 @@ public partial class MainViewModel : ObservableObject
             defaultText: region.Text,
             defaultFont: detectedFont,
             defaultSize: detectedSize,
-            defaultBold: region.Bold,
+            defaultFontWeight: region.FontWeight,
             defaultItalic: region.Italic,
             defaultUnderline: false,
             defaultColorHex: "#000000",
@@ -1401,7 +1401,7 @@ public partial class MainViewModel : ObservableObject
                 Height = System.Math.Max(nh, 0.02),
                 Color = c, Text = r.Text,
                 FontFamily = r.FontFamily, FontSize = safeFontSize,
-                Bold = r.Bold, Italic = r.Italic, Underline = r.Underline, Align = r.Align,
+                FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline, Align = r.Align,
                 BackgroundColor = bg
             };
             page.Annotations.Add(stamp);
@@ -1551,7 +1551,7 @@ public partial class MainViewModel : ObservableObject
                 defaultText: a.Text ?? "",
                 defaultFont: string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily,
                 defaultSize: a.FontSize > 0 ? a.FontSize : 14,
-                defaultBold: a.Bold, defaultItalic: a.Italic, defaultUnderline: a.Underline,
+                defaultFontWeight: a.FontWeight > 0 ? a.FontWeight : 400, defaultItalic: a.Italic, defaultUnderline: a.Underline,
                 defaultColorHex: hex,
                 defaultAlign: a.Align,
                 defaultBackgroundHex: bgDefault);
@@ -1561,7 +1561,7 @@ public partial class MainViewModel : ObservableObject
                 {
                     var c = (Color)ColorConverter.ConvertFromString(r.ColorHex);
                     a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
-                    a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
+                    a.FontWeight = r.FontWeight; a.Italic = r.Italic; a.Underline = r.Underline;
                     a.Align = r.Align; a.Color = c;
                     Color? bg = null;
                     if (!string.IsNullOrWhiteSpace(r.BackgroundHex))

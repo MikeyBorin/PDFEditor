@@ -32,7 +32,14 @@ public class ExtractService
         return pdf.GetPage(pageIndex + 1).Text;
     }
 
-    public record RegionText(string Text, double AverageFontHeightPoints, double FontPointSize, string FontFamily, bool Bold, bool Italic, string DebugInfo);
+    /// <summary><see cref="FontWeight"/> is OpenType-style (400 Regular / 500 Medium /
+    /// 600 SemiBold / 700 Bold), derived from PdfPig's Letter.Font.Weight.
+    /// <see cref="Bold"/> stays for callers that only need the coarse flag
+    /// (true iff FontWeight &gt;= 550).</summary>
+    public record RegionText(string Text, double AverageFontHeightPoints, double FontPointSize, string FontFamily, int FontWeight, bool Italic, string DebugInfo)
+    {
+        public bool Bold => FontWeight >= 550;
+    }
 
     /// <summary>Extracts words whose bounding boxes intersect the given normalized region.
     /// Coordinates are 0..1 with origin top-left (matches AnnotationLayer).</summary>
@@ -69,7 +76,7 @@ public class ExtractService
             if (inside) hits.Add(word);
         }
 
-        if (hits.Count == 0) return new RegionText("", 10.0, 10.0, "Arial", false, false, "no hits");
+        if (hits.Count == 0) return new RegionText("", 10.0, 10.0, "Arial", 400, false, "no hits");
 
         // Reading order: top→bottom, left→right; group into lines by y-band.
         var ordered = hits.OrderByDescending(w => w.BoundingBox.Bottom).ThenBy(w => w.BoundingBox.Left).ToList();
@@ -104,7 +111,8 @@ public class ExtractService
         var letters = hits.SelectMany(w => w.Letters).ToList();
         double pointSize = 12.0;
         string fontFamily = "Arial";
-        bool bold = false, italic = false;
+        int fontWeight = 400;
+        bool italic = false;
         if (letters.Count > 0)
         {
             // Candidate 1: reported Letter.PointSize (often correct; sometimes wrong because of
@@ -165,36 +173,48 @@ public class ExtractService
                                  .GroupBy(s => s)
                                  .OrderByDescending(g => g.Count())
                                  .FirstOrDefault()?.Key ?? "";
-            fontFamily = NormalizeFontName(rawName, out bold, out italic);
+            fontFamily = NormalizeFontName(rawName, out var nameBold, out var nameItalic);
+            italic = nameItalic;
 
-            // Prefer PdfPig's FontDetails (IsBold / IsItalic / Weight) over the
-            // name-substring heuristic — it reads /FontDescriptor and glyph tables
-            // directly, so it catches weights that aren't encoded in the font name
-            // (e.g. Medium/Semibold/Black-weight faces stored as just "Arial").
-            // Majority vote across the sampled letters, weighted by Font.Weight.
+            // Prefer PdfPig's FontDetails.Weight over the name-substring heuristic —
+            // it reads /FontDescriptor directly, so it catches Medium/SemiBold/Black
+            // faces stored as just "Arial" without weight suffix. Take the median
+            // and snap to the nearest OpenType stop (400/500/600/700/800/900).
             try
             {
-                int boldVotes = 0, italicVotes = 0, total = 0;
+                var weights = new List<int>();
+                int italicVotes = 0, total = 0;
                 foreach (var l in letters)
                 {
                     var f = l.Font;
                     if (f == null) continue;
                     total++;
-                    if (f.IsBold || f.Weight >= 500) boldVotes++;
+                    var w = f.Weight;
+                    if (w <= 0 || w > 950) w = f.IsBold ? 700 : 0;
+                    if (w > 0) weights.Add(w);
                     if (f.IsItalic) italicVotes++;
                 }
-                if (total > 0)
+                if (weights.Count > 0)
                 {
-                    if (boldVotes   * 2 >= total) bold = true;
-                    if (italicVotes * 2 >= total) italic = true;
+                    weights.Sort();
+                    fontWeight = SnapToStandardWeight(weights[weights.Count / 2]);
                 }
+                else if (nameBold)
+                {
+                    fontWeight = 700;
+                }
+                if (total > 0 && italicVotes * 2 >= total) italic = true;
             }
-            catch { /* fall back to name-substring detection */ }
+            catch
+            {
+                // Fall back to name-substring detection if FontDetails is unavailable.
+                if (nameBold) fontWeight = 700;
+            }
         }
 
         // For diagnostics — expose the three candidate calculations so the caller can display them.
         var debug = $"userUnit={userUnit:0.##}, reported={reportedFor(letters, userUnit)}pt, glyph={glyphCandFor(letters, userUnit):0.0}pt, bbox={(avgH > 0 ? avgH * userUnit / 1.15 : 0):0.0}pt, avgH={avgH * userUnit:0.0}pt, picked={pointSize:0.0}pt, letters={letters.Count}";
-        return new RegionText(sb.ToString().TrimEnd(), avgH, pointSize, fontFamily, bold, italic, debug);
+        return new RegionText(sb.ToString().TrimEnd(), avgH, pointSize, fontFamily, fontWeight, italic, debug);
 
         static string reportedFor(System.Collections.Generic.List<UglyToad.PdfPig.Content.Letter> ls, double scale)
         {
@@ -206,6 +226,23 @@ public class ExtractService
             var h = ls.Select(l => l.GlyphRectangle.Height).Where(x => x > 0.5 && x < 400).OrderByDescending(x => x).Take(System.Math.Max(3, ls.Count / 4)).ToList();
             return h.Count > 0 ? (h.Average() / 0.72) * scale : 0;
         }
+    }
+
+    /// <summary>Round a raw OpenType weight to the nearest standard stop:
+    /// 400 (Regular), 500 (Medium), 600 (SemiBold), 700 (Bold), 800 (ExtraBold),
+    /// 900 (Black). Values below 400 (Light/Thin) fold to 400 — most Windows-
+    /// installed families don't ship those weights and we don't currently
+    /// surface them in the dialog.</summary>
+    private static int SnapToStandardWeight(int weight)
+    {
+        int[] stops = { 400, 500, 600, 700, 800, 900 };
+        int best = 400, bestDist = int.MaxValue;
+        foreach (var s in stops)
+        {
+            var d = System.Math.Abs(weight - s);
+            if (d < bestDist) { bestDist = d; best = s; }
+        }
+        return best;
     }
 
     /// <summary>PDF font names often have prefixes like 'ABCDEF+Arial-BoldMT' or 'TimesNewRomanPSMT'.

@@ -87,7 +87,7 @@ public class AnnotationLayer : Canvas
                     defaultText: a.Text ?? "",
                     defaultFont: string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily,
                     defaultSize: a.FontSize > 0 ? a.FontSize : 14,
-                    defaultBold: a.Bold,
+                    defaultFontWeight: a.FontWeight > 0 ? a.FontWeight : 400,
                     defaultItalic: a.Italic,
                     defaultUnderline: a.Underline,
                     defaultColorHex: hex,
@@ -101,7 +101,7 @@ public class AnnotationLayer : Canvas
                         a.Text = r.Text;
                         a.FontFamily = r.FontFamily;
                         a.FontSize = r.FontSize;
-                        a.Bold = r.Bold;
+                        a.FontWeight = r.FontWeight;
                         a.Italic = r.Italic;
                         a.Underline = r.Underline;
                         a.Align = r.Align;
@@ -124,7 +124,7 @@ public class AnnotationLayer : Canvas
                     defaultText: a.Text ?? "",
                     defaultFont: string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily,
                     defaultSize: a.FontSize > 0 ? a.FontSize : 12,
-                    defaultBold: a.Bold, defaultItalic: a.Italic, defaultUnderline: a.Underline,
+                    defaultFontWeight: a.FontWeight > 0 ? a.FontWeight : 400, defaultItalic: a.Italic, defaultUnderline: a.Underline,
                     defaultColorHex: hex,
                     defaultAlign: a.Align,
                     defaultBackgroundHex: BgHexOrNull(a.BackgroundColor) ?? "#FFEB82");
@@ -134,7 +134,7 @@ public class AnnotationLayer : Canvas
                     {
                         var c = (Color)ColorConverter.ConvertFromString(r.ColorHex);
                         a.Text = r.Text; a.FontFamily = r.FontFamily; a.FontSize = r.FontSize;
-                        a.Bold = r.Bold; a.Italic = r.Italic; a.Underline = r.Underline;
+                        a.FontWeight = r.FontWeight; a.Italic = r.Italic; a.Underline = r.Underline;
                         a.Align = r.Align; a.Color = c;
                         a.BackgroundColor = ParseHexOrNull(r.BackgroundHex);
                         MainVM.RememberFontChoice(r);
@@ -411,7 +411,7 @@ public class AnnotationLayer : Canvas
                     Padding = new Thickness(6),
                     FontSize = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt,
                     FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
-                    FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
+                    FontWeight = FontWeight.FromOpenTypeWeight(a.FontWeight > 0 ? a.FontWeight : 400),
                     FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
                     TextDecorations = a.Underline ? TextDecorations.Underline : null,
                     TextAlignment = a.Align switch
@@ -477,7 +477,7 @@ public class AnnotationLayer : Canvas
                         Padding = new Thickness(6),
                         FontSize = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt,
                         FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
-                        FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
+                        FontWeight = FontWeight.FromOpenTypeWeight(a.FontWeight > 0 ? a.FontWeight : 400),
                         FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
                         TextDecorations = a.Underline ? TextDecorations.Underline : null,
                         TextAlignment = a.Align switch
@@ -528,7 +528,7 @@ public class AnnotationLayer : Canvas
                         Foreground = brush,
                         FontSize = fs,
                         FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
-                        FontWeight = a.Bold ? FontWeights.Bold : FontWeights.Normal,
+                        FontWeight = FontWeight.FromOpenTypeWeight(a.FontWeight > 0 ? a.FontWeight : 400),
                         FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
                         TextDecorations = a.Underline ? TextDecorations.Underline : null,
                         TextAlignment = a.Align switch
@@ -637,7 +637,7 @@ public class AnnotationLayer : Canvas
             var r = TextStampDialog.Show(
                 defaultFont: MainVM.CurrentFontFamily,
                 defaultSize: MainVM.CurrentFontSize,
-                defaultBold: MainVM.CurrentBold,
+                defaultFontWeight: MainVM.CurrentFontWeight,
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
@@ -654,7 +654,7 @@ public class AnnotationLayer : Canvas
                         X = nx, Y = ny, Width = 0.02, Height = 0.02,
                         Color = c, Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
-                        Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
+                        FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
                         BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
@@ -674,7 +674,7 @@ public class AnnotationLayer : Canvas
             var r = TextStampDialog.Show(
                 defaultFont: MainVM.CurrentFontFamily,
                 defaultSize: MainVM.CurrentFontSize,
-                defaultBold: MainVM.CurrentBold,
+                defaultFontWeight: MainVM.CurrentFontWeight,
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
@@ -694,7 +694,7 @@ public class AnnotationLayer : Canvas
                         X = nx, Y = ny, Width = wrapW, Height = 0.05,
                         Color = c, Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
-                        Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
+                        FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
                         BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
@@ -724,7 +724,7 @@ public class AnnotationLayer : Canvas
             var r = TextStampDialog.Show(
                 defaultFont: MainVM.CurrentFontFamily,
                 defaultSize: MainVM.CurrentFontSize,
-                defaultBold: MainVM.CurrentBold,
+                defaultFontWeight: MainVM.CurrentFontWeight,
                 defaultItalic: MainVM.CurrentItalic,
                 defaultUnderline: MainVM.CurrentUnderline,
                 defaultColorHex: hex,
@@ -750,7 +750,7 @@ public class AnnotationLayer : Canvas
                         StrokeThickness = 1.5,
                         Text = r.Text,
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
-                        Bold = r.Bold, Italic = r.Italic, Underline = r.Underline,
+                        FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
                         BackgroundColor = ParseHexOrNull(r.BackgroundHex)
                     };
@@ -781,7 +781,7 @@ public class AnnotationLayer : Canvas
                 PageIndex = Page.PageIndex, Kind = AnnotationKind.TextStamp,
                 X = nx, Y = ny, Width = 0.03, Height = 0.03,
                 Color = MainVM.CurrentColor, Text = glyph,
-                FontFamily = "Segoe UI Symbol", FontSize = 18, Bold = true
+                FontFamily = "Segoe UI Symbol", FontSize = 18, FontWeight = 700
             };
             AddAnnotationWithUndo(mark);
             // Tool stays armed — clicking again drops another mark. Use the Select
