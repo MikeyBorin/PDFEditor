@@ -147,3 +147,13 @@ if (Test-Path $issScript) {
 
 Write-Host ""
 Write-Host "Ship dist\$Stem.zip and (if built) dist\ArtiMaxPDFEditor-Setup-$Version.exe." -ForegroundColor DarkGray
+
+# --- Clean up the staging folder -------------------------------------------
+# Staging is a build intermediate: the ZIP and Setup.exe both contain the
+# same files. Keeping it around after a successful build just wastes ~90 MB
+# per release. If -SkipZip was passed we KEEP staging because in that mode
+# it *is* the deliverable.
+if (-not $SkipZip -and (Test-Path $Staging)) {
+    Remove-Item $Staging -Recurse -Force
+    Write-Host "Cleaned up staging folder ($Stem)." -ForegroundColor DarkGray
+}
