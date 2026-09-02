@@ -158,6 +158,12 @@ and share for any noncommercial purpose (personal, hobby, educational,
 research, charitable, government, non-profit). Commercial use requires
 a separate written licence — contact the copyright holder.
 
+Source code is public on GitHub:
+<https://github.com/MikeyBorin/PDFEditor>. Anyone can view, clone, or
+download it — the non-commercial licence still applies to what you do
+with it. Tagged releases give you a fixed source snapshot matching each
+shipped binary.
+
 Third-party libraries retain their own licences (all permissive open
 source) and downstream users receive those components under their
 original terms. See the [LICENSE](LICENSE) file for full terms.

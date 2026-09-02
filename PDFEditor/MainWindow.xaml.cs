@@ -672,6 +672,8 @@ public partial class MainWindow : Window
             "permissive open-source components).\n\n" +
             "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.\n" +
             "Press F1 at any time to open the help page.\n\n" +
+            "Source code:\n" +
+            "  https://github.com/MikeyBorin/PDFEditor\n\n" +
             "Enjoying the app? Support development:\n" +
             "  https://github.com/sponsors/MikeyBorin\n" +
             "  https://ko-fi.com/mikeyborin\n\n" +
