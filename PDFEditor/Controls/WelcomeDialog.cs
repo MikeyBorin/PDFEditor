@@ -11,8 +11,8 @@ namespace PDFEditor.Controls;
 /// First-run welcome + disclaimer. Shown once per user, then never again — the
 /// acknowledgement is persisted as a marker file under %AppData%\ArtiMaxPDFEditor\.
 /// Soft "Got it" dismissal (single button) rather than an Accept/Decline gate;
-/// the MIT license applies regardless of click-through, so the dialog exists for
-/// reassurance and transparency, not legal enforcement.
+/// the PolyForm Noncommercial licence applies regardless of click-through, so
+/// the dialog exists for reassurance and transparency, not legal enforcement.
 /// </summary>
 public static class WelcomeDialog
 {
@@ -53,7 +53,7 @@ public static class WelcomeDialog
         });
         root.Children.Add(new TextBlock
         {
-            Text = "Free desktop PDF editor · v1.0.1 · by ArtiMax",
+            Text = "Free for non-commercial use · v1.0.2 · by ArtiMax",
             Opacity = 0.7,
             Margin = new Thickness(0, 0, 0, 18)
         });
@@ -100,7 +100,7 @@ public static class WelcomeDialog
                 new LineBreak(), new LineBreak(),
                 new Run("Always keep backups of important documents before editing.") { FontWeight = FontWeights.SemiBold },
                 new LineBreak(), new LineBreak(),
-                new Run("See the LICENSE file (MIT License) for full terms. Help → About also shows this text at any time."),
+                new Run("See the LICENSE file (PolyForm Noncommercial License 1.0.0) for full terms. Help → About also shows this text at any time."),
             }
         });
         warnBorder.Child = warn;

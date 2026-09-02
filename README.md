@@ -1,12 +1,15 @@
 # ArtiMax PDF Editor
 
-A free, licence-free desktop PDF editor for Windows by **ArtiMax**. Aims to cover
-the everyday features people actually reach for in Adobe Acrobat, without the
-subscription.
+A desktop PDF editor for Windows by **ArtiMax** — **free for personal and
+non-commercial use** under the PolyForm Noncommercial License 1.0.0. Aims
+to cover the everyday features people actually reach for in Adobe Acrobat,
+without the subscription. Commercial use requires a separate licence — see
+the [LICENSE](LICENSE) file and get in touch.
 
-Built on **.NET 9 / WPF** using only permissive open-source libraries: PdfSharpCore
+Built on **.NET 9 / WPF** using permissive open-source libraries: PdfSharpCore
 (MIT), PDFium via PDFtoImage (Apache 2.0), PdfPig (Apache 2.0), Tesseract
-(Apache 2.0), CommunityToolkit.Mvvm (MIT), DocumentFormat.OpenXml (MIT).
+(Apache 2.0), CommunityToolkit.Mvvm (MIT), DocumentFormat.OpenXml (MIT). Those
+components remain under their original licences for downstream users.
 
 ## Getting started
 
@@ -150,8 +153,28 @@ signatures with certificate chains.
 
 ## Licence
 
-MIT. Third-party libraries retain their own licences (all permissive).
-See the [LICENSE](LICENSE) file for full terms.
+**PolyForm Noncommercial License 1.0.0.** Free to use, copy, modify,
+and share for any noncommercial purpose (personal, hobby, educational,
+research, charitable, government, non-profit). Commercial use requires
+a separate written licence — contact the copyright holder.
+
+Third-party libraries retain their own licences (all permissive open
+source) and downstream users receive those components under their
+original terms. See the [LICENSE](LICENSE) file for full terms.
+
+## Support the project
+
+ArtiMax PDF Editor is offered free for noncommercial use. If it saves
+you time or money, please consider a donation. Donations are optional
+and do not entitle the donor to any commercial rights under the
+licence.
+
+- **GitHub Sponsors:** <https://github.com/sponsors/MikeyBorin>
+- **Ko-fi:** <https://ko-fi.com/mikeyborin>
+
+*(both links go live once the accounts are set up on the respective platforms —
+GitHub Sponsors needs identity verification + Stripe; Ko-fi needs a free
+account with a PayPal or Stripe connection.)*
 
 ## Disclaimer
 

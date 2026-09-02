@@ -657,11 +657,17 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.1\n\n" +
-            "Free desktop PDF editor by ArtiMax, built with WPF, PdfSharpCore, PDFium,\n" +
-            "PdfPig and Tesseract. All components use permissive open-source licences.\n\n" +
+            "ArtiMax PDF Editor  v1.0.2\n\n" +
+            "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
+            "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
+            "a separate written licence — see the LICENSE file.\n\n" +
+            "Built with WPF, PdfSharpCore, PDFium, PdfPig and Tesseract (all\n" +
+            "permissive open-source components).\n\n" +
             "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.\n" +
             "Press F1 at any time to open the help page.\n\n" +
+            "Enjoying the app? Support development:\n" +
+            "  https://github.com/sponsors/MikeyBorin\n" +
+            "  https://ko-fi.com/mikeyborin\n\n" +
             "─────────────────────────────────────────────\n" +
             "DISCLAIMER\n\n" +
             "This software is provided \"AS IS\", without warranty of any kind, express " +
@@ -669,7 +675,7 @@ public partial class MainWindow : Window
             "ArtiMax accepts no liability for data loss, corrupted files, or any other " +
             "damages arising from use of this software.\n\n" +
             "USE AT YOUR OWN RISK. Keep backups of important documents before editing.\n\n" +
-            "See the LICENSE file for full terms (MIT License).",
+            "See the LICENSE file for full terms (PolyForm Noncommercial 1.0.0).",
             "About ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 }

@@ -15,7 +15,7 @@ public class FileAssociationService
     private const string ProgId          = "ArtiMax.PDFDocument";
     private const string AppRegKey       = "ArtiMaxPDFEditor";
     private const string AppFriendlyName = "ArtiMax PDF Editor";
-    private const string AppDescription  = "Free desktop PDF editor by ArtiMax (portable, MIT-licensed).";
+    private const string AppDescription  = "Desktop PDF editor by ArtiMax. Free for non-commercial use (PolyForm Noncommercial 1.0.0).";
 
     private static string? ExePath => Environment.ProcessPath;
 
