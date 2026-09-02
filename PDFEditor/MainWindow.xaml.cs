@@ -650,7 +650,14 @@ public partial class MainWindow : Window
         if (await VM.ConfirmDiscardChangesAsync())
         {
             _forceClose = true;
-            Close();
+            // Defer Close() to a fresh dispatcher tick. ConfirmDiscardChangesAsync uses
+            // a synchronous MessageBox.Show for the Yes/No/Cancel prompt; for the "No"
+            // branch there's no `await` inside it, so the task completes synchronously
+            // and the awaiter here resumes on the *same* stack frame — i.e. still inside
+            // the Window_Closing invocation. Calling Window.Close() while the window is
+            // mid-Closing throws InvalidOperationException. Posting via BeginInvoke lets
+            // the current Closing event unwind first, then Close runs cleanly.
+            _ = Dispatcher.BeginInvoke(new System.Action(() => Close()));
         }
     }
 
