@@ -667,7 +667,7 @@ public partial class MainWindow : Window
             "ArtiMax PDF Editor  v1.0.2\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
-            "a separate written licence — see the LICENSE file.\n\n" +
+            "a separate written licence — email support@artimax.com.au.\n\n" +
             "Built with WPF, PdfSharpCore, PDFium, PdfPig and Tesseract (all\n" +
             "permissive open-source components).\n\n" +
             "Drop a PDF onto the window to open. Ctrl+O / Ctrl+S / Ctrl+P for common actions.\n" +

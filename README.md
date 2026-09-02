@@ -156,7 +156,7 @@ signatures with certificate chains.
 **PolyForm Noncommercial License 1.0.0.** Free to use, copy, modify,
 and share for any noncommercial purpose (personal, hobby, educational,
 research, charitable, government, non-profit). Commercial use requires
-a separate written licence — contact the copyright holder.
+a separate written licence — email <support@artimax.com.au>.
 
 Source code is public on GitHub:
 <https://github.com/MikeyBorin/PDFEditor>. Anyone can view, clone, or
