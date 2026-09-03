@@ -58,12 +58,18 @@ if (Test-Path $Staging) { Remove-Item $Staging -Recurse -Force }
 New-Item -ItemType Directory -Path $Staging | Out-Null
 
 # --- Publish -----------------------------------------------------------------
+# NOTE: deliberately NOT using -p:PublishSingleFile=true. Single-file worked
+# fine at home but broke at least one office PC where AppLocker / SmartScreen
+# / corporate antivirus blocked the runtime extraction of the Tesseract native
+# DLLs (tesseract50.dll, leptonica-*.dll) to %TEMP%\.net\ArtiMaxPDFEditor\.
+# Loose-file publish puts every DLL beside the exe, installs into Program
+# Files via Setup.exe, and side-steps the whole extract-and-load-from-Temp
+# chain that made OCR fail with a bare "TargetInvocationException" on
+# locked-down machines.
 & dotnet publish $Project `
     -c Release `
     -r $Runtime `
     --self-contained true `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:DebugType=None `
     -p:DebugSymbols=false `
     -o $Staging `

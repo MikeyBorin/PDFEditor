@@ -1164,13 +1164,17 @@ public partial class MainViewModel : ObservableObject
     {
         if (_doc.Bytes is null || CurrentPage is null) return;
         if (!_ocr.IsAvailable && !await PromptDownloadOcrDataAsync()) return;
-        IsBusy = true;
-        var idx = CurrentPage.PageIndex;
-        var lang = ViewSettings.Settings.OcrLanguage;
-        var text = await Task.Run(() => _ocr.OcrPage(_doc.Bytes!, idx, language: lang));
-        ExtractedText = $"--- OCR Page {idx + 1} ({lang}) ---\n{text}";
-        StatusText = $"OCR done on page {idx + 1} ({lang}).";
-        IsBusy = false;
+        try
+        {
+            IsBusy = true;
+            var idx = CurrentPage.PageIndex;
+            var lang = ViewSettings.Settings.OcrLanguage;
+            var text = await Task.Run(() => _ocr.OcrPage(_doc.Bytes!, idx, language: lang));
+            ExtractedText = $"--- OCR Page {idx + 1} ({lang}) ---\n{text}";
+            StatusText = $"OCR done on page {idx + 1} ({lang}).";
+        }
+        catch (Exception ex) { ShowOcrFailure(ex, "OCR failed"); }
+        finally { IsBusy = false; }
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
@@ -1828,7 +1832,7 @@ public partial class MainViewModel : ObservableObject
             ExtractedText = text;
             StatusText = $"OCR complete for {_doc.PageCount} pages ({lang}) → {Path.GetFileName(dlg.FileName)}.";
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "OCR failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception ex) { ShowOcrFailure(ex, "OCR failed"); }
         finally { IsBusy = false; }
     }
 
@@ -1891,8 +1895,41 @@ public partial class MainViewModel : ObservableObject
             await ApplyBytesPreservingOverlaysAsync(bytes, $"OCR — Make Searchable ({lang})");
             StatusText = "Made searchable. Save (Ctrl+S) to overwrite the file.";
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "Searchable PDF failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (Exception ex) { ShowOcrFailure(ex, "Searchable PDF failed"); }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>Format an OCR failure so the actual root cause (not the outer
+    /// TargetInvocationException wrapper) is shown, plus a hint for the common
+    /// culprits when Tesseract's native DLLs fail to load — missing VC++
+    /// runtime, missing x64 folder, antivirus blocking DLLs.</summary>
+    private static void ShowOcrFailure(Exception ex, string caption)
+    {
+        var root = ex.GetBaseException();
+        var body = $"{root.GetType().Name}: {root.Message}";
+
+        // If the root looks like a native-DLL / type-load failure, most likely
+        // Tesseract couldn't find leptonica*.dll / tesseract*.dll or a runtime
+        // dep. Add pointers so the user knows what to check.
+        var s = (root.Message ?? "") + " " + root.GetType().Name;
+        bool nativeishFailure =
+            root is System.DllNotFoundException ||
+            root is System.BadImageFormatException ||
+            root is System.TypeInitializationException ||
+            s.Contains("leptonica", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("tesseract", StringComparison.OrdinalIgnoreCase) ||
+            s.Contains("target of an invocation", StringComparison.OrdinalIgnoreCase);
+        if (nativeishFailure)
+        {
+            body += "\n\nOCR failed to load its native components. Common causes:\n" +
+                    "  • Missing Microsoft Visual C++ 2015-2022 Redistributable (x64).\n" +
+                    "    Download: https://aka.ms/vs/17/release/vc_redist.x64.exe\n" +
+                    "  • The 'x64' folder next to ArtiMaxPDFEditor.exe is missing or\n" +
+                    "    was quarantined by antivirus. Reinstall or restore the DLLs.\n" +
+                    "  • The " + Path.Combine("tessdata", "*.traineddata") + " file is corrupt.\n" +
+                    "    Redownload via Tools → OCR Languages.";
+        }
+        MessageBox.Show(body, caption, MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]

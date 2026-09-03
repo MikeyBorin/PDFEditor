@@ -63,13 +63,11 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut";           GroupD
 Name: "associate";   Description: "Register as .pdf handler (Open With)"; GroupDescription: "File associations:";    Flags: unchecked
 
 [Files]
-; The self-contained exe (~216 MB) plus its shipping companions.
-Source: "{#SourceDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\LICENSE";       DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\README.md";     DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\Help\*";        DestDir: "{app}\Help";     Flags: ignoreversion recursesubdirs createallsubdirs
-; Bundled English OCR training data — optional, only present if publish.ps1 found tessdata to include.
-Source: "{#SourceDir}\tessdata\*";    DestDir: "{app}\tessdata"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; Copy the entire staging folder — with loose-file (non-single-file) publish
+; the staging tree contains the exe plus hundreds of .NET runtime DLLs and
+; native DLLs (tesseract50.dll, leptonica*.dll, pdfium.dll) in x64/, runtimes/,
+; and localisation folders. All of that must ship together for the app to run.
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
