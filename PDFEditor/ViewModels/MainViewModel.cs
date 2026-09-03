@@ -33,6 +33,20 @@ public partial class MainViewModel : ObservableObject
     private readonly FileAssociationService _fileAssoc = new();
     private readonly TessdataDownloadService _tessDownload = new();
     private readonly TranslateService _translate = new();
+    private readonly UpdateCheckService _updateCheck = new();
+
+    [RelayCommand]
+    private async Task CheckForUpdates()
+    {
+        StatusText = "Checking github.com for updates...";
+        var result = await _updateCheck.CheckAsync();
+        StatusText = result.ErrorMessage != null
+            ? "Update check failed — see dialog."
+            : result.NewerAvailable
+                ? $"Update available: {result.LatestVersion}."
+                : $"You're on the latest version ({result.CurrentVersion}).";
+        Controls.UpdateCheckDialog.Show(result, _updateCheck.LatestPageUrl);
+    }
 
     // Persisted only for the current session (dialog reopens where you left off).
     [ObservableProperty] private string translateSourceLang = "en";

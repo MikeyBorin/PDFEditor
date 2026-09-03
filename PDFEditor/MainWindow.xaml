@@ -148,6 +148,7 @@
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_View Help" InputGestureText="F1" Click="Help_Click"/>
+                <MenuItem Header="_Check for Updates..." Command="{Binding CheckForUpdatesCommand}" ToolTip="Ask github.com if a newer release is available. No auto-check — this only runs when you click."/>
                 <Separator/>
                 <MenuItem Header="About" Click="About_Click"/>
             </MenuItem>
