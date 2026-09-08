@@ -830,7 +830,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.32\n\n" +
+            "ArtiMax PDF Editor  v1.0.33\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +
