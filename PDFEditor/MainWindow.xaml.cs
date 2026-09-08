@@ -201,9 +201,7 @@ public partial class MainWindow : Window
 
     private void Help_Click(object sender, RoutedEventArgs e) => OpenHelp();
 
-    private void Support_Click(object sender, RoutedEventArgs e) => OpenHelp("support");
-
-    private void OpenHelp(string? anchor = null)
+    private void OpenHelp()
     {
         try
         {
@@ -213,15 +211,103 @@ public partial class MainWindow : Window
                 MessageBox.Show($"Help file not found:\n{path}", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var target = string.IsNullOrWhiteSpace(anchor)
-                ? path
-                : new System.Uri(path).AbsoluteUri + "#" + anchor;
-            var psi = new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true };
+            var psi = new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true };
             System.Diagnostics.Process.Start(psi);
         }
         catch (System.Exception ex)
         {
             MessageBox.Show(ex.Message, "Help", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void Support_Click(object sender, RoutedEventArgs e)
+    {
+        var body = new StackPanel { Margin = new Thickness(20) };
+
+        body.Children.Add(new TextBlock
+        {
+            Text = "Support ArtiMax PDF Editor",
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10)
+        });
+
+        body.Children.Add(new TextBlock
+        {
+            Text = "The app is free for non-commercial use. If it has saved you time, "
+                 + "a small donation helps keep it maintained. Donations are entirely "
+                 + "optional and don't unlock anything.",
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 380,
+            Margin = new Thickness(0, 0, 0, 16)
+        });
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+
+        var ghBtn = new Button
+        {
+            Content = "GitHub Sponsors",
+            Padding = new Thickness(14, 6, 14, 6),
+            Margin = new Thickness(0, 0, 8, 0),
+            MinWidth = 150,
+            ToolTip = "https://github.com/sponsors/MikeyBorin"
+        };
+        ghBtn.Click += (_, _) => OpenUrl("https://github.com/sponsors/MikeyBorin");
+        buttons.Children.Add(ghBtn);
+
+        var kofiBtn = new Button
+        {
+            Content = "Ko-fi",
+            Padding = new Thickness(14, 6, 14, 6),
+            MinWidth = 150,
+            ToolTip = "https://ko-fi.com/mikeyborin"
+        };
+        kofiBtn.Click += (_, _) => OpenUrl("https://ko-fi.com/mikeyborin");
+        buttons.Children.Add(kofiBtn);
+
+        body.Children.Add(buttons);
+
+        var closeBtn = new Button
+        {
+            Content = "Close",
+            Padding = new Thickness(14, 4, 14, 4),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0),
+            MinWidth = 80,
+            IsCancel = true
+        };
+        body.Children.Add(closeBtn);
+
+        var dlg = new Window
+        {
+            Title = "Support the Project",
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            Content = body,
+            Background = TryFindResource("Panel") as Brush ?? SystemColors.WindowBrush,
+            Foreground = TryFindResource("TextBase") as Brush ?? SystemColors.ControlTextBrush
+        };
+        closeBtn.Click += (_, _) => dlg.Close();
+        dlg.ShowDialog();
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (System.Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Open link", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -835,7 +921,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.34\n\n" +
+            "ArtiMax PDF Editor  v1.0.35\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +
