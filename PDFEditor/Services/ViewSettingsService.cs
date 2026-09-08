@@ -21,6 +21,18 @@ public class ViewSettings
     /// "OCR Languages" submenu — installing a language and setting it as
     /// current in one click.</summary>
     public string OcrLanguage { get; set; } = "eng";
+
+    // --- Tool surfaces (persist across launches) ---
+
+    /// <summary>Which content the left sidebar shows: Thumbnails or Tools.</summary>
+    public LeftPanelMode LeftPanelMode { get; set; } = LeftPanelMode.Thumbnails;
+
+    /// <summary>Whether the floating Tool Palette window was open at last exit.</summary>
+    public bool ToolPaletteOpen { get; set; }
+
+    /// <summary>When true, the palette and sidebar-Tools show icons only
+    /// (labels hidden); tooltips still reveal the tool name on hover.</summary>
+    public bool ToolsIconsOnly { get; set; }
 }
 
 /// <summary>Persists user's zoom-mode preference across app runs. JSON in

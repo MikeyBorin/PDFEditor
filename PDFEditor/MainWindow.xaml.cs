@@ -10,10 +10,24 @@ namespace PDFEditor;
 
 public partial class MainWindow : Window
 {
+    private System.Windows.Threading.DispatcherTimer? _windowsMenuTimer;
+
     public MainWindow()
     {
         InitializeComponent();
         Icon = Controls.AppIcon.Create();
+        Activated += (_, _) => RefreshWindowsMenuHeader();
+        // Low-frequency poll so the Windows menu header count stays fresh
+        // even if the user never re-focuses this window — for example, they
+        // open a new file from here (spawns a new instance) and keep working
+        // in the newly focused window. Cheap: enumerating processes is sub-ms.
+        _windowsMenuTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = System.TimeSpan.FromSeconds(3)
+        };
+        _windowsMenuTimer.Tick += (_, _) => RefreshWindowsMenuHeader();
+        _windowsMenuTimer.Start();
+        Closed += (_, _) => _windowsMenuTimer?.Stop();
         Loaded += (_, _) =>
         {
             if (DataContext is ViewModels.MainViewModel vm)
@@ -39,6 +53,10 @@ public partial class MainWindow : Window
             ApplyToolbarVisibility();
             SyncZoomCombo();
             RefreshGroupButtons();
+            RefreshWindowsMenuHeader();
+            // Restore the palette open/closed state from the previous session.
+            if (VM.ViewSettings.Settings.ToolPaletteOpen && _toolPalette is null)
+                ToggleToolPalette();
         };
     }
 
@@ -110,13 +128,27 @@ public partial class MainWindow : Window
             var files = (string[])e.Data.GetData(DataFormats.FileDrop)!;
             if (files.Length > 0)
             {
-                await VM.LoadFileAsync(files[0]);
+                await VM.OpenFileInAppropriateWindow(files[0]);
             }
         }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Ctrl+Tab: cycle to next open PDF Editor window; Ctrl+Shift+Tab: previous.
+        if (e.Key == Key.Tab && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            var reverse = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            CycleToNextInstance(reverse);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.F4 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ToggleToolPalette();
+            e.Handled = true;
+            return;
+        }
         if (Keyboard.Modifiers == ModifierKeys.Control)
         {
             switch (e.Key)
@@ -296,75 +328,9 @@ public partial class MainWindow : Window
     private void ShapeGroup_ShowMenu(object sender, RoutedEventArgs e) => ShowGroupMenu(sender as UIElement, ShapeGroupTools);
 
     // Standard palette for the toolbar Colour drop-down. 6 columns × 2 rows.
-    private static readonly (string Name, Color Colour)[] ColourPalette = new[]
-    {
-        ("Black",  Colors.Black),
-        ("Grey",   Color.FromRgb(0x80, 0x80, 0x80)),
-        ("Red",    Colors.Red),
-        ("Orange", Color.FromRgb(0xFF, 0xA5, 0x00)),
-        ("Yellow", Colors.Yellow),
-        ("Green",  Color.FromRgb(0x2E, 0x8B, 0x2E)),
-        ("Cyan",   Color.FromRgb(0x00, 0xB7, 0xC3)),
-        ("Blue",   Color.FromRgb(0x1F, 0x6F, 0xEB)),
-        ("Purple", Color.FromRgb(0x8B, 0x5C, 0xF6)),
-        ("Pink",   Color.FromRgb(0xE9, 0x1E, 0x63)),
-        ("Brown",  Color.FromRgb(0x8B, 0x45, 0x13)),
-        ("White",  Colors.White),
-    };
-
     private void ColourButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button btn) return;
-
-        var menu = new ContextMenu
-        {
-            PlacementTarget = btn,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
-            StaysOpen = false,
-            // Same fix as ShowGroupMenu — parent to the anchor so the popup HWND
-            // gets a proper visual-tree ancestor.
-        };
-
-        // Palette grid: one MenuItem whose Header is a UniformGrid of 12 colour cells.
-        var grid = new System.Windows.Controls.Primitives.UniformGrid
-        {
-            Columns = 6, Rows = 2, Width = 180
-        };
-        foreach (var (name, col) in ColourPalette)
-        {
-            var cell = new Button
-            {
-                Width = 26, Height = 26, Margin = new Thickness(1),
-                Background = new SolidColorBrush(col),
-                BorderBrush = System.Windows.Media.Brushes.Gray, BorderThickness = new Thickness(1),
-                ToolTip = name, Cursor = Cursors.Hand
-            };
-            var captured = col;
-            cell.Click += (_, _) =>
-            {
-                VM.CurrentColor = captured;
-                menu.IsOpen = false;
-            };
-            grid.Children.Add(cell);
-        }
-        var gridItem = new MenuItem
-        {
-            Header = grid,
-            StaysOpenOnClick = true,
-            Padding = new Thickness(6)
-        };
-        menu.Items.Add(gridItem);
-        menu.Items.Add(new Separator());
-        var more = new MenuItem { Header = "More Colours..." };
-        more.Click += (_, _) =>
-        {
-            menu.IsOpen = false;
-            VM.PickColourCommand.Execute(null);
-        };
-        menu.Items.Add(more);
-
-        btn.ContextMenu = menu;
-        menu.IsOpen = true;
+        if (sender is Button btn) Controls.ColourSwatchPopup.Show(btn, VM);
     }
 
     private void ShowGroupMenu(UIElement? anchor, ToolEntry[] group)
@@ -640,9 +606,15 @@ public partial class MainWindow : Window
     }
 
     private bool _forceClose;
+    private bool _isClosing;
 
     private async void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        // Set as soon as the OS starts closing us. Read by the palette's
+        // Closed handler so it can distinguish "user closed the palette" from
+        // "palette closed because owner window closed" — only the former
+        // should persist ToolPaletteOpen = false.
+        _isClosing = true;
         if (_forceClose) return;
         if (!VM.HasUnsavedChanges) return;
         // Defer close and prompt.
@@ -659,12 +631,161 @@ public partial class MainWindow : Window
             // the current Closing event unwind first, then Close runs cleanly.
             _ = Dispatcher.BeginInvoke(new System.Action(() => Close()));
         }
+        else
+        {
+            // User cancelled the close — the window keeps living, so the
+            // palette shouldn't treat itself as being torn down with us.
+            _isClosing = false;
+        }
+    }
+
+    // --- Windows menu: switch between multiple running instances -----------
+    // Each Open-file launch spawns a new PDFEditor.exe. This menu enumerates
+    // the others by walking the process list on demand and reading their
+    // MainWindowTitle (which already carries the open filename).
+
+    private void RefreshWindowsMenuHeader()
+    {
+        try
+        {
+            var others = Services.InstanceSwitcherService.GetOtherInstances();
+            WindowsMenu.Header = others.Count == 0 ? "_Windows" : $"_Windows ({others.Count + 1})";
+            // Also feed the count into the VM so the title bar picks up the
+            // "[N windows]" suffix — the visible cue at the top of the window.
+            if (DataContext is ViewModels.MainViewModel vm) vm.OtherWindowCount = others.Count;
+        }
+        catch { WindowsMenu.Header = "_Windows"; }
+    }
+
+    private void WindowsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        WindowsMenu.Items.Clear();
+
+        // Current window first, checked, disabled — anchor point.
+        var self = new MenuItem
+        {
+            Header = "✓ " + (VM?.Title ?? Title ?? "(this window)"),
+            IsEnabled = false
+        };
+        WindowsMenu.Items.Add(self);
+
+        var others = Services.InstanceSwitcherService.GetOtherInstances();
+        if (others.Count == 0)
+        {
+            WindowsMenu.Items.Add(new Separator());
+            WindowsMenu.Items.Add(new MenuItem { Header = "(No other windows open)", IsEnabled = false });
+            return;
+        }
+
+        WindowsMenu.Items.Add(new Separator());
+        foreach (var inst in others)
+        {
+            var mi = new MenuItem
+            {
+                Header = inst.FileLabel,
+                ToolTip = $"PID {inst.ProcessId} · {inst.FullTitle}"
+            };
+            var hwnd = inst.Hwnd;
+            mi.Click += (_, _) => Services.InstanceSwitcherService.Activate(hwnd);
+            WindowsMenu.Items.Add(mi);
+        }
+
+        WindowsMenu.Items.Add(new Separator());
+        var refresh = new MenuItem { Header = "Refresh" };
+        refresh.Click += (_, _) => WindowsMenu_SubmenuOpened(sender, e);
+        WindowsMenu.Items.Add(refresh);
+
+        var closeAll = new MenuItem
+        {
+            Header = $"Close All Windows ({others.Count + 1})",
+            ToolTip = "Send Close to every open PDF Editor window (each still prompts for unsaved changes)"
+        };
+        closeAll.Click += (_, _) => CloseAllWindows();
+        WindowsMenu.Items.Add(closeAll);
+
+        RefreshWindowsMenuHeader();
+    }
+
+    private void CloseAllWindows()
+    {
+        var others = Services.InstanceSwitcherService.GetOtherInstances();
+        foreach (var inst in others)
+            Services.InstanceSwitcherService.RequestClose(inst.Hwnd);
+        // Close ourselves last, on a fresh dispatcher tick so the menu can
+        // unwind first. Window_Closing still runs the unsaved-changes prompt.
+        Dispatcher.BeginInvoke(new Action(Close));
+    }
+
+    private void CycleToNextInstance(bool reverse)
+    {
+        var others = Services.InstanceSwitcherService.GetOtherInstances();
+        if (others.Count == 0) return;
+        var target = reverse ? others[^1] : others[0];
+        Services.InstanceSwitcherService.Activate(target.Hwnd);
+    }
+
+    // --- Floating Tool Palette ---------------------------------------------
+    private Controls.ToolPaletteWindow? _toolPalette;
+
+    private void ToolPaletteMenuItem_Click(object sender, RoutedEventArgs e) => ToggleToolPalette();
+
+    private void ToggleToolPalette()
+    {
+        if (_toolPalette is { IsLoaded: true })
+        {
+            _toolPalette.Close();
+            _toolPalette = null;
+            ToolPaletteMenuItem.IsChecked = false;
+            SetPaletteOpenSetting(false);
+            return;
+        }
+        _toolPalette = new Controls.ToolPaletteWindow(VM, this);
+        _toolPalette.Closed += (_, _) =>
+        {
+            _toolPalette = null;
+            ToolPaletteMenuItem.IsChecked = false;
+            // Only persist the "closed" state when the palette was closed by
+            // the user — NOT when it closes as a side-effect of the main
+            // window shutting down. Owned windows auto-close with their owner,
+            // and saving `ToolPaletteOpen = false` there would make the
+            // palette forget its state across app restarts.
+            if (!_isClosing) SetPaletteOpenSetting(false);
+        };
+        _toolPalette.Show();
+        // Anchor at the top-left of the page-viewer column, just past the
+        // thumbnails + splitter. PointToScreen returns device pixels;
+        // TransformFromDevice converts to DIPs so Window.Left/Top is correct
+        // on high-DPI displays.
+        try
+        {
+            var origin = PagesScroller.PointToScreen(new System.Windows.Point(0, 0));
+            var src = System.Windows.PresentationSource.FromVisual(this);
+            if (src?.CompositionTarget is not null)
+            {
+                var dip = src.CompositionTarget.TransformFromDevice.Transform(origin);
+                _toolPalette.Left = dip.X;
+                _toolPalette.Top = dip.Y;
+            }
+        }
+        catch { /* fall back to constructor default */ }
+        ToolPaletteMenuItem.IsChecked = true;
+        SetPaletteOpenSetting(true);
+    }
+
+    private void SetPaletteOpenSetting(bool open)
+    {
+        try
+        {
+            VM.ViewSettings.Settings.ToolPaletteOpen = open;
+            VM.ViewSettings.Save();
+        }
+        catch { }
     }
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.2\n\n" +
+            "ArtiMax PDF Editor  v1.0.27\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +

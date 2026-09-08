@@ -22,7 +22,13 @@ public enum AnnotationKind
     Whiteout,
     Redaction,
     Image,
-    Callout
+    Callout,
+    /// <summary>Interactive AcroForm checkbox to write into the PDF at save
+    /// time. Unlike other annotation kinds, this one is NOT flattened as
+    /// page content — the flattener writes a real PdfCheckBoxField into
+    /// doc.AcroForm.Fields so downstream tools (viewer clicks,
+    /// Check All Boxes) treat it as a form field.</summary>
+    CheckboxField
 }
 
 /// <summary>Coordinates are normalized 0..1 in PDF page space (origin top-left, y-down).</summary>
@@ -62,6 +68,16 @@ public class PdfAnnotation
     }
     public bool Italic { get; set; }
     public bool Underline { get; set; }
+    // --- Word-style text effects (whole-stamp, not per-run). ---
+    // Sub/Super and SmallCaps/AllCaps are semantically exclusive pairs; the
+    // UI enforces that, but the fields are independent so old files with only
+    // one flag set continue to render correctly.
+    public bool Strikethrough { get; set; }
+    public bool DoubleStrikethrough { get; set; }
+    public bool Superscript { get; set; }
+    public bool Subscript { get; set; }
+    public bool SmallCaps { get; set; }
+    public bool AllCaps { get; set; }
     public TextAlign Align { get; set; } = TextAlign.Left;
     public List<(double X, double Y)> InkPoints { get; set; } = new();
     /// <summary>Rectangle / Ellipse only: draw as filled instead of outlined.</summary>

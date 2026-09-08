@@ -23,6 +23,42 @@ public class SignatureLibraryService
     {
         LibraryDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArtiMaxPDFEditor", "signatures");
         Directory.CreateDirectory(LibraryDir);
+        MigrateOpaqueImages();
+    }
+
+    // One-time migration: any signature whose backing file is a photo format
+    // (JPG/BMP/GIF, or a legacy opaque PNG import) is re-processed through the
+    // white-to-alpha filter and saved as a transparent PNG. Existing drawn
+    // signatures (already transparent PNGs) are left alone.
+    private void MigrateOpaqueImages()
+    {
+        try
+        {
+            if (!File.Exists(IndexPath)) return;
+            var list = JsonSerializer.Deserialize<List<SignatureEntry>>(File.ReadAllText(IndexPath)) ?? new();
+            var changed = false;
+            foreach (var e in list)
+            {
+                var full = Path.Combine(LibraryDir, e.FileName);
+                if (!File.Exists(full)) continue;
+                var ext = Path.GetExtension(e.FileName).ToLowerInvariant();
+                if (ext is ".jpg" or ".jpeg" or ".bmp" or ".gif")
+                {
+                    try
+                    {
+                        var pngBytes = SignatureImageProcessor.WhiteToAlphaPngFromFile(full);
+                        var newFile = $"sig-{Guid.NewGuid():N}.png";
+                        File.WriteAllBytes(Path.Combine(LibraryDir, newFile), pngBytes);
+                        try { File.Delete(full); } catch { }
+                        e.FileName = newFile;
+                        changed = true;
+                    }
+                    catch { /* leave entry as-is if a single file fails */ }
+                }
+            }
+            if (changed) Save(list);
+        }
+        catch { /* migration is best-effort; do not throw during startup */ }
     }
 
     public List<SignatureEntry> List()
@@ -40,18 +76,23 @@ public class SignatureLibraryService
 
     public string GetFullPath(SignatureEntry e) => Path.Combine(LibraryDir, e.FileName);
 
-    /// <summary>Copies a source image into the library and returns the new entry.</summary>
+    /// <summary>Imports a source image, converts white/near-white pixels to
+    /// transparent, and saves the result as a PNG in the library.</summary>
     public SignatureEntry AddFromFile(string sourcePath, string? displayName = null)
     {
         var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
         if (ext is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif"))
             throw new InvalidOperationException("Unsupported image type: " + ext);
+        // Always run through white-to-alpha and store as PNG so downstream
+        // rendering (WPF overlay + PdfSharpCore flatten) shows the signature
+        // strokes over the page content, not on an opaque white background.
+        var pngBytes = SignatureImageProcessor.WhiteToAlphaPngFromFile(sourcePath);
         var entry = new SignatureEntry
         {
             Name = displayName ?? Path.GetFileNameWithoutExtension(sourcePath),
-            FileName = $"sig-{Guid.NewGuid():N}{ext}"
+            FileName = $"sig-{Guid.NewGuid():N}.png"
         };
-        File.Copy(sourcePath, Path.Combine(LibraryDir, entry.FileName), true);
+        File.WriteAllBytes(Path.Combine(LibraryDir, entry.FileName), pngBytes);
         var list = List();
         list.Insert(0, entry);
         Save(list);

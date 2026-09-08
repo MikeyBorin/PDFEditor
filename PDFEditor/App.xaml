@@ -11,6 +11,9 @@
             <ctrl:ZoomWidthConverter x:Key="ZoomWidth" />
             <ctrl:ZoomHeightConverter x:Key="ZoomHeight" />
             <ctrl:EnumEqualsConverter x:Key="EnumEquals" />
+            <ctrl:EnumToVisibilityConverter x:Key="EnumToVisibility" />
+            <ctrl:GlyphFontConverter x:Key="GlyphFont" />
+            <ctrl:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
             <ctrl:ContrastBorderConverter x:Key="ContrastBorder" />
             <ctrl:ColorToBrushConverter x:Key="ColorToBrush" />
             <ctrl:OneBasedIndexConverter x:Key="OneBasedIndex" />
@@ -188,21 +191,30 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="{x:Type MenuItem}">
-                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="20,4,20,4">
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="4,4,20,4">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="18"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <ContentPresenter x:Name="HeaderPresenter" Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" TextBlock.Foreground="{DynamicResource MenuPopupFg}"/>
-                                            <TextBlock x:Name="GestureText" Grid.Column="1" Text="{TemplateBinding InputGestureText}" Foreground="{DynamicResource TextMuted}" Margin="16,0,0,0"/>
+                                            <!-- Check indicator: shown when IsChecked=True (checkable items). -->
+                                            <TextBlock x:Name="CheckMark" Grid.Column="0" Text="✓" FontWeight="Bold"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                       Foreground="{DynamicResource MenuPopupFg}" Visibility="Collapsed"/>
+                                            <ContentPresenter x:Name="HeaderPresenter" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" TextBlock.Foreground="{DynamicResource MenuPopupFg}"/>
+                                            <TextBlock x:Name="GestureText" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="{DynamicResource TextMuted}" Margin="16,0,0,0"/>
                                         </Grid>
                                     </Border>
                                     <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                        </Trigger>
                                         <Trigger Property="IsHighlighted" Value="True">
                                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Selection}"/>
                                             <Setter TargetName="HeaderPresenter" Property="TextBlock.Foreground" Value="{DynamicResource SelectionText}"/>
                                             <Setter TargetName="GestureText" Property="Foreground" Value="{DynamicResource SelectionText}"/>
+                                            <Setter TargetName="CheckMark" Property="Foreground" Value="{DynamicResource SelectionText}"/>
                                         </Trigger>
                                         <Trigger Property="IsEnabled" Value="False">
                                             <Setter Property="Opacity" Value="0.4"/>

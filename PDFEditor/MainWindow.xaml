@@ -109,6 +109,10 @@
                 <MenuItem Header="Add _Bates Numbering..." Command="{Binding AddBatesCommand}"/>
                 <MenuItem Header="Insert Image on Current Page..." Command="{Binding InsertImageOnCurrentCommand}"/>
                 <MenuItem Header="_Fill Form..." Command="{Binding FillFormCommand}"/>
+                <MenuItem Header="_Check All Boxes" Command="{Binding CheckAllBoxesCommand}"
+                          ToolTip="Tick every AcroForm checkbox field in this PDF. Works only for real form fields; drawn checkboxes need the Tick tool for now."/>
+                <MenuItem Header="_Match Checkbox Sizes" Command="{Binding NormalizeCheckboxSizesCommand}"
+                          ToolTip="Resize every checkbox in the document (unsaved overlays + saved form fields) to the same size — the median of their current sizes. Top-left of each box stays put."/>
                 <MenuItem Header="_Signatures..." Command="{Binding OpenSignatureLibraryCommand}"/>
                 <MenuItem Header="_Compare with another PDF..." Command="{Binding CompareWithFileCommand}"/>
                 <MenuItem Header="_Redact Search Results" Command="{Binding RedactSearchResultsCommand}"/>
@@ -139,12 +143,23 @@
                           IsChecked="{Binding ZoomMode, Converter={StaticResource EnumEquals}, ConverterParameter=ActualSize, Mode=OneWay}"
                           Command="{Binding SetZoomModeCommand}" CommandParameter="{x:Static vm:ZoomMode.ActualSize}"/>
                 <Separator/>
+                <MenuItem x:Name="ToolPaletteMenuItem" Header="_Tool Palette" InputGestureText="F4"
+                          IsCheckable="True" Click="ToolPaletteMenuItem_Click"
+                          ToolTip="Show a small floating window with every annotation tool"/>
+                <MenuItem Header="Tools _Icons Only" IsCheckable="True"
+                          IsChecked="{Binding ToolsIconsOnly, Mode=TwoWay}"
+                          ToolTip="Hide labels in the Tool Palette. Hover shows the name."/>
+                <Separator/>
                 <MenuItem Header="_Customise Toolbar..." Command="{Binding CustomiseToolbarCommand}"/>
                 <Separator/>
                 <MenuItem Header="_Theme">
                     <MenuItem Header="_Dark" Command="{Binding SetThemeCommand}" CommandParameter="Dark"/>
                     <MenuItem Header="_Light" Command="{Binding SetThemeCommand}" CommandParameter="Light"/>
                 </MenuItem>
+            </MenuItem>
+            <MenuItem x:Name="WindowsMenu" Header="_Windows" SubmenuOpened="WindowsMenu_SubmenuOpened"
+                      ToolTip="Switch to another open PDF Editor window">
+                <MenuItem Header="(No other windows open)" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="_View Help" InputGestureText="F1" Click="Help_Click"/>
@@ -328,9 +343,11 @@
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left: thumbnails -->
+            <!-- Left: thumbnails OR tools (LeftPanelMode) -->
             <Border Grid.Column="0" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
                 <DockPanel>
+                    <!-- Page nav header — ALWAYS visible in both modes so you can
+                         still jump pages when Tools mode has replaced the thumbnails. -->
                     <Grid DockPanel.Dock="Top" Margin="8,8,8,4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>

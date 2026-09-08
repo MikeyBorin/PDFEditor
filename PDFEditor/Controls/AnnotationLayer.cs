@@ -58,6 +58,13 @@ public class AnnotationLayer : Canvas
     private string? _resizingHandle;   // "E", "S", or "SE"
     private double _resizeAnchorRight, _resizeAnchorBottom;
 
+    // Sticky checkbox size — shared across all AnnotationLayer instances so
+    // moving to a different page keeps the template dimensions. Set by the
+    // first real checkbox drag; used to auto-size subsequent clicks so a run
+    // of "click, click, click" produces uniform boxes.
+    private static double _lastCheckboxWidth;
+    private static double _lastCheckboxHeight;
+
     public AnnotationLayer()
     {
         Background = Brushes.Transparent;
@@ -67,6 +74,127 @@ public class AnnotationLayer : Canvas
         MouseLeftButtonUp += OnMouseUp;
         MouseEnter += (_, _) => UpdateCursor();
         MouseMove += TrackMousePosition;
+        MouseRightButtonUp += OnMouseRightButtonUp;
+    }
+
+    // --- Paste context menu (right-click on empty page area) -----------------
+
+    private void OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Page is null || MainVM is null) return;
+        var pos = e.GetPosition(this);
+        var w = Page.PixelWidth > 0 ? Page.PixelWidth : ActualWidth;
+        var h = Page.PixelHeight > 0 ? Page.PixelHeight : ActualHeight;
+        if (w <= 0 || h <= 0) return;
+        var nx = System.Math.Clamp(pos.X / w, 0, 1);
+        var ny = System.Math.Clamp(pos.Y / h, 0, 1);
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = this,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
+            StaysOpen = false
+        };
+        ContextMenu = menu; // parent to a visual so the popup gets its screen origin
+
+        bool hasText = false;
+        bool hasImage = false;
+        try { hasText = System.Windows.Clipboard.ContainsText(); } catch { }
+        try { hasImage = System.Windows.Clipboard.ContainsImage(); } catch { }
+
+        var pasteText = new MenuItem { Header = "Paste _text", IsEnabled = hasText };
+        pasteText.Click += (_, _) => TryPasteTextAt(nx, ny);
+        menu.Items.Add(pasteText);
+
+        var pasteImage = new MenuItem { Header = "Paste _image", IsEnabled = hasImage };
+        pasteImage.Click += (_, _) => TryPasteImageAt(nx, ny);
+        menu.Items.Add(pasteImage);
+
+        if (!hasText && !hasImage)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = "(Nothing to paste)", IsEnabled = false });
+        }
+
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void TryPasteTextAt(double nx, double ny)
+    {
+        if (Page is null || MainVM is null) return;
+        string text;
+        try { text = System.Windows.Clipboard.GetText(); }
+        catch { return; }
+        if (string.IsNullOrEmpty(text)) return;
+
+        var wrapW = System.Math.Min(0.6, System.Math.Max(0.1, 0.9 - nx));
+        var stamp = new PdfAnnotation
+        {
+            PageIndex = Page.PageIndex,
+            Kind = AnnotationKind.TextStamp,
+            X = nx, Y = ny, Width = wrapW, Height = 0.05,
+            Color = MainVM.CurrentColor,
+            Text = text,
+            FontFamily = MainVM.CurrentFontFamily,
+            FontSize = MainVM.CurrentFontSize,
+            FontWeight = MainVM.CurrentFontWeight,
+            Italic = MainVM.CurrentItalic,
+            Underline = MainVM.CurrentUnderline,
+            Align = MainVM.CurrentAlign,
+        };
+        AddAnnotationWithUndo(stamp);
+        MainVM.SelectedAnnotation = stamp;
+        MainVM.CurrentTool = ToolMode.Select;
+        MainVM.StatusText = $"Pasted text ({text.Length} chars). Save to flatten.";
+    }
+
+    private void TryPasteImageAt(double nx, double ny)
+    {
+        if (Page is null || MainVM is null) return;
+        System.Windows.Media.Imaging.BitmapSource? bmp;
+        try { bmp = System.Windows.Clipboard.GetImage(); }
+        catch { return; }
+        if (bmp is null) return;
+
+        string tempPath;
+        try
+        {
+            var dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ArtiMaxPDFEditor");
+            System.IO.Directory.CreateDirectory(dir);
+            tempPath = System.IO.Path.Combine(dir, $"paste-{System.Guid.NewGuid():N}.png");
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using var fs = System.IO.File.Create(tempPath);
+            encoder.Save(fs);
+        }
+        catch (System.Exception ex)
+        {
+            MainVM.StatusText = "Paste image failed: " + ex.Message;
+            return;
+        }
+
+        // Size the image so its aspect matches the source and its width is ~30%
+        // of the page. Height derived from the page's own aspect ratio.
+        double aspect = bmp.PixelHeight > 0 ? (double)bmp.PixelWidth / bmp.PixelHeight : 1.0;
+        double normW = 0.30;
+        double normH = normW * ((double)Page.PixelWidth / Page.PixelHeight) / aspect;
+        if (normH <= 0.01 || normH > 0.6) normH = 0.15;
+
+        double normX = System.Math.Clamp(nx - normW / 2, 0, 1 - normW);
+        double normY = System.Math.Clamp(ny - normH / 2, 0, 1 - normH);
+
+        var img = new PdfAnnotation
+        {
+            PageIndex = Page.PageIndex,
+            Kind = AnnotationKind.Image,
+            X = normX, Y = normY, Width = normW, Height = normH,
+            ImagePath = tempPath
+        };
+        AddAnnotationWithUndo(img);
+        MainVM.SelectedAnnotation = img;
+        MainVM.CurrentTool = ToolMode.Select;
+        MainVM.StatusText = "Pasted image. Drag with Select tool; Save to flatten.";
     }
 
     private bool TryEditUnderCursor(Point posLocal)
@@ -92,7 +220,13 @@ public class AnnotationLayer : Canvas
                     defaultUnderline: a.Underline,
                     defaultColorHex: hex,
                     defaultAlign: a.Align,
-                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor));
+                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor),
+                    defaultStrikethrough: a.Strikethrough,
+                    defaultDoubleStrikethrough: a.DoubleStrikethrough,
+                    defaultSuperscript: a.Superscript,
+                    defaultSubscript: a.Subscript,
+                    defaultSmallCaps: a.SmallCaps,
+                    defaultAllCaps: a.AllCaps);
                 if (r != null)
                 {
                     try
@@ -107,6 +241,12 @@ public class AnnotationLayer : Canvas
                         a.Align = r.Align;
                         a.Color = c;
                         a.BackgroundColor = ParseHexOrNull(r.BackgroundHex);
+                        a.Strikethrough = r.Strikethrough;
+                        a.DoubleStrikethrough = r.DoubleStrikethrough;
+                        a.Superscript = r.Superscript;
+                        a.Subscript = r.Subscript;
+                        a.SmallCaps = r.SmallCaps;
+                        a.AllCaps = r.AllCaps;
                         MainVM.RememberFontChoice(r);
                         // Do NOT touch X/Y or Width (preserves resize) — keep layout exactly.
                         Page.RaiseAnnotationChanged();
@@ -127,7 +267,13 @@ public class AnnotationLayer : Canvas
                     defaultFontWeight: a.FontWeight > 0 ? a.FontWeight : 400, defaultItalic: a.Italic, defaultUnderline: a.Underline,
                     defaultColorHex: hex,
                     defaultAlign: a.Align,
-                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor) ?? "#FFEB82");
+                    defaultBackgroundHex: BgHexOrNull(a.BackgroundColor) ?? "#FFEB82",
+                    defaultStrikethrough: a.Strikethrough,
+                    defaultDoubleStrikethrough: a.DoubleStrikethrough,
+                    defaultSuperscript: a.Superscript,
+                    defaultSubscript: a.Subscript,
+                    defaultSmallCaps: a.SmallCaps,
+                    defaultAllCaps: a.AllCaps);
                 if (r != null)
                 {
                     try
@@ -137,6 +283,12 @@ public class AnnotationLayer : Canvas
                         a.FontWeight = r.FontWeight; a.Italic = r.Italic; a.Underline = r.Underline;
                         a.Align = r.Align; a.Color = c;
                         a.BackgroundColor = ParseHexOrNull(r.BackgroundHex);
+                        a.Strikethrough = r.Strikethrough;
+                        a.DoubleStrikethrough = r.DoubleStrikethrough;
+                        a.Superscript = r.Superscript;
+                        a.Subscript = r.Subscript;
+                        a.SmallCaps = r.SmallCaps;
+                        a.AllCaps = r.AllCaps;
                         MainVM.RememberFontChoice(r);
                         Page.RaiseAnnotationChanged();
                         MainVM.StatusText = a.Kind == AnnotationKind.StickyNote ? "Note updated." : "Callout updated.";
@@ -388,6 +540,26 @@ public class AnnotationLayer : Canvas
                 SetLeft(el, a.X * w); SetTop(el, a.Y * h);
                 return el;
 
+            case AnnotationKind.CheckboxField:
+                // Draft/placeholder for a form checkbox to be written into the
+                // AcroForm at save time. Rendered as a dashed blue rectangle
+                // with a subtle fill so it's obviously a form field and not a
+                // regular Rectangle annotation.
+                var cbFill = System.Windows.Media.Color.FromArgb(24, 0x1F, 0x6F, 0xEB);
+                var cbBorder = System.Windows.Media.Color.FromRgb(0x1F, 0x6F, 0xEB);
+                var cb = new Rectangle
+                {
+                    Width = a.Width * w,
+                    Height = a.Height * h,
+                    Stroke = new SolidColorBrush(cbBorder),
+                    StrokeThickness = 1.5,
+                    StrokeDashArray = new DoubleCollection { 3, 2 },
+                    Fill = new SolidColorBrush(cbFill),
+                    IsHitTestVisible = false
+                };
+                SetLeft(cb, a.X * w); SetTop(cb, a.Y * h);
+                return cb;
+
             case AnnotationKind.Ink:
                 if (a.InkPoints.Count < 2) return null;
                 var poly = new Polyline
@@ -470,16 +642,16 @@ public class AnnotationLayer : Canvas
                     if (arrow != null) container.Children.Add(arrow);
 
                     // The text box.
+                    var coFs = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt;
                     var calloutText = new TextBlock
                     {
-                        Text = a.Text ?? "",
                         TextWrapping = TextWrapping.Wrap,
                         Padding = new Thickness(6),
-                        FontSize = (a.FontSize > 0 ? a.FontSize : 12) * pxPerPt,
+                        FontSize = a.Superscript || a.Subscript ? System.Math.Max(6, coFs * 0.7) : coFs,
                         FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
                         FontWeight = FontWeight.FromOpenTypeWeight(a.FontWeight > 0 ? a.FontWeight : 400),
                         FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
-                        TextDecorations = a.Underline ? TextDecorations.Underline : null,
+                        TextDecorations = BuildDecorations(a),
                         TextAlignment = a.Align switch
                         {
                             TextAlign.Center => TextAlignment.Center,
@@ -489,6 +661,7 @@ public class AnnotationLayer : Canvas
                         },
                         Foreground = new SolidColorBrush(a.Color == default ? Colors.Black : a.Color)
                     };
+                    PopulateInlinesForCaps(calloutText, a.Text ?? "", a);
                     var calloutBg = a.BackgroundColor is Color cbc
                         ? Color.FromArgb(230, cbc.R, cbc.G, cbc.B)
                         : Color.FromArgb(230, 255, 235, 130);
@@ -521,16 +694,15 @@ public class AnnotationLayer : Canvas
                     var fs = pointSize * pxPerPt;
                     var tb = new TextBlock
                     {
-                        Text = a.Text ?? "",
                         TextWrapping = TextWrapping.Wrap,
                         Width = maxTextW,
                         MaxWidth = maxTextW,
                         Foreground = brush,
-                        FontSize = fs,
+                        FontSize = a.Superscript || a.Subscript ? System.Math.Max(6, fs * 0.7) : fs,
                         FontFamily = new FontFamily(string.IsNullOrEmpty(a.FontFamily) ? "Arial" : a.FontFamily),
                         FontWeight = FontWeight.FromOpenTypeWeight(a.FontWeight > 0 ? a.FontWeight : 400),
                         FontStyle = a.Italic ? FontStyles.Italic : FontStyles.Normal,
-                        TextDecorations = a.Underline ? TextDecorations.Underline : null,
+                        TextDecorations = BuildDecorations(a),
                         TextAlignment = a.Align switch
                         {
                             TextAlign.Center => TextAlignment.Center,
@@ -540,6 +712,9 @@ public class AnnotationLayer : Canvas
                         },
                         Tag = a
                     };
+                    PopulateInlinesForCaps(tb, a.Text ?? "", a);
+                    if (a.Superscript) tb.Padding = new Thickness(0, 0, 0, fs * 0.35);
+                    else if (a.Subscript) tb.Padding = new Thickness(0, fs * 0.35, 0, 0);
                     if (a.BackgroundColor is Color tsbg)
                     {
                         // Wrap in a padded Border so the background is visible around
@@ -656,7 +831,11 @@ public class AnnotationLayer : Canvas
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
-                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex),
+                        Strikethrough = r.Strikethrough,
+                        DoubleStrikethrough = r.DoubleStrikethrough,
+                        Superscript = r.Superscript, Subscript = r.Subscript,
+                        SmallCaps = r.SmallCaps, AllCaps = r.AllCaps
                     };
                     AddAnnotationWithUndo(note);
                     MainVM.RememberFontChoice(r);
@@ -696,7 +875,11 @@ public class AnnotationLayer : Canvas
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
-                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex),
+                        Strikethrough = r.Strikethrough,
+                        DoubleStrikethrough = r.DoubleStrikethrough,
+                        Superscript = r.Superscript, Subscript = r.Subscript,
+                        SmallCaps = r.SmallCaps, AllCaps = r.AllCaps
                     };
                     AddAnnotationWithUndo(stamp);
                     MainVM.RememberFontChoice(r);
@@ -752,7 +935,11 @@ public class AnnotationLayer : Canvas
                         FontFamily = r.FontFamily, FontSize = r.FontSize,
                         FontWeight = r.FontWeight, Italic = r.Italic, Underline = r.Underline,
                         Align = r.Align,
-                        BackgroundColor = ParseHexOrNull(r.BackgroundHex)
+                        BackgroundColor = ParseHexOrNull(r.BackgroundHex),
+                        Strikethrough = r.Strikethrough,
+                        DoubleStrikethrough = r.DoubleStrikethrough,
+                        Superscript = r.Superscript, Subscript = r.Subscript,
+                        SmallCaps = r.SmallCaps, AllCaps = r.AllCaps
                     };
                     AddAnnotationWithUndo(callout);
                     MainVM.RememberFontChoice(r);
@@ -799,13 +986,16 @@ public class AnnotationLayer : Canvas
                 ToolMode.Ellipse   or ToolMode.EllipseFilled   => AnnotationKind.Ellipse,
                 ToolMode.Ink => AnnotationKind.Ink,
                 ToolMode.Whiteout => AnnotationKind.Whiteout,
+                ToolMode.InsertCheckbox => AnnotationKind.CheckboxField,
                 ToolMode.SelectText or ToolMode.SelectImage => AnnotationKind.Rectangle, // draft preview only
                 _ => AnnotationKind.Rectangle
             },
             X = nx, Y = ny, Width = 0, Height = 0,
             Color = tool is ToolMode.SelectText or ToolMode.SelectImage
                 ? System.Windows.Media.Colors.DodgerBlue
-                : MainVM.CurrentColor,
+                : tool is ToolMode.InsertCheckbox
+                    ? System.Windows.Media.Color.FromRgb(0x1F, 0x6F, 0xEB)  // form-field blue
+                    : MainVM.CurrentColor,
             StrokeThickness = MainVM.CurrentThickness,
             Filled = tool is ToolMode.RectangleFilled or ToolMode.EllipseFilled
         };
@@ -827,6 +1017,25 @@ public class AnnotationLayer : Canvas
             var mp = e.GetPosition(this);
             var nx = System.Math.Clamp(mp.X / pw, 0, 1);
             var ny = System.Math.Clamp(mp.Y / ph, 0, 1);
+            // Checkbox fields stay square through resize. Snap whichever handle
+            // the user is dragging so the box grows or shrinks along both axes
+            // by the same visual pixel amount.
+            if (_resizingAnnotation.Kind == AnnotationKind.CheckboxField)
+            {
+                double sidePx;
+                switch (_resizingHandle)
+                {
+                    case "E":  sidePx = mp.X - _resizingAnnotation.X * pw; break;
+                    case "S":  sidePx = mp.Y - _resizingAnnotation.Y * ph; break;
+                    default:   sidePx = System.Math.Max(mp.X - _resizingAnnotation.X * pw,
+                                                        mp.Y - _resizingAnnotation.Y * ph); break;
+                }
+                sidePx = System.Math.Max(6, sidePx);
+                _resizingAnnotation.Width  = sidePx / pw;
+                _resizingAnnotation.Height = sidePx / ph;
+                Rebuild();
+                return;
+            }
             switch (_resizingHandle)
             {
                 case "E":
@@ -876,6 +1085,23 @@ public class AnnotationLayer : Canvas
         {
             _drafting.InkPoints.Add((pos.X / w, pos.Y / h));
         }
+        else if (_drafting.Kind == AnnotationKind.CheckboxField)
+        {
+            // Constrain to a visual square. Take the larger of |dx|,|dy| as
+            // the side length in screen pixels, then convert to normalized
+            // dims. Width/Height differ in the normalized space because they
+            // divide by page width vs. height (page isn't square), so the
+            // rendered widget ends up square in point / pixel space.
+            var dx = pos.X - _dragStart.X;
+            var dy = pos.Y - _dragStart.Y;
+            var side = System.Math.Max(System.Math.Abs(dx), System.Math.Abs(dy));
+            var sx = dx >= 0 ? _dragStart.X : _dragStart.X - side;
+            var sy = dy >= 0 ? _dragStart.Y : _dragStart.Y - side;
+            _drafting.X = sx / w;
+            _drafting.Y = sy / h;
+            _drafting.Width  = side / w;
+            _drafting.Height = side / h;
+        }
         else
         {
             var x = System.Math.Min(_dragStart.X, pos.X) / w;
@@ -914,6 +1140,29 @@ public class AnnotationLayer : Canvas
         var ok = _drafting.Kind == AnnotationKind.Ink
             ? _drafting.InkPoints.Count > 2
             : _drafting.Width > minSize && _drafting.Height > minSize;
+
+        // Sticky checkbox size: a click (or micro-drag) drops a new checkbox
+        // at the same size as the last one the user placed via a real drag.
+        // A real drag both places at that size AND updates the sticky template.
+        if (_drafting.Kind == AnnotationKind.CheckboxField)
+        {
+            if (ok)
+            {
+                _lastCheckboxWidth  = _drafting.Width;
+                _lastCheckboxHeight = _drafting.Height;
+            }
+            else if (_lastCheckboxWidth > 0 && _lastCheckboxHeight > 0)
+            {
+                var pw = Page!.PixelWidth  > 0 ? Page.PixelWidth  : ActualWidth;
+                var ph = Page.PixelHeight > 0 ? Page.PixelHeight : ActualHeight;
+                _drafting.Width  = _lastCheckboxWidth;
+                _drafting.Height = _lastCheckboxHeight;
+                // Anchor top-left at the click point (dragStart), clamped in-page.
+                _drafting.X = System.Math.Clamp(_dragStart.X / pw, 0, 1 - _lastCheckboxWidth);
+                _drafting.Y = System.Math.Clamp(_dragStart.Y / ph, 0, 1 - _lastCheckboxHeight);
+                ok = true;
+            }
+        }
 
         if (_draftingVisual != null) Children.Remove(_draftingVisual);
         _draftingVisual = null;
@@ -958,6 +1207,81 @@ public class AnnotationLayer : Canvas
 
     private static string? BgHexOrNull(Color? c)
         => c is null ? null : $"#{c.Value.R:X2}{c.Value.G:X2}{c.Value.B:X2}";
+
+    /// <summary>Apply AllCaps to a text string for WPF rendering. SmallCaps
+    /// uses per-character Runs instead (see PopulateInlinesForCaps).</summary>
+    private static string TransformCaps(string text, PdfAnnotation a)
+        => a.AllCaps ? (text ?? "").ToUpper() : (text ?? "");
+
+    /// <summary>Set a TextBlock's content according to the annotation's caps flags.
+    /// AllCaps → single uppercased Text. SmallCaps → Inlines/Runs where each
+    /// originally-lowercase character is uppercased at ~78% of the base font size,
+    /// giving the proper "SMALL CAPS" typographic look. Neither → plain text.</summary>
+    private static void PopulateInlinesForCaps(TextBlock tb, string raw, PdfAnnotation a)
+    {
+        raw ??= "";
+        if (a.AllCaps)
+        {
+            tb.Text = raw.ToUpper();
+            return;
+        }
+        if (!a.SmallCaps)
+        {
+            tb.Text = raw;
+            return;
+        }
+        // Proper small-caps: group consecutive chars by "was originally lowercase"
+        // and render each run at either full size or 78%. Uppercase everything so
+        // the small-caps glyphs actually look like small capitals rather than
+        // scaled-down lowercase letters.
+        tb.Text = null;
+        tb.Inlines.Clear();
+        var full = tb.FontSize;
+        var smallSize = System.Math.Max(6, full * 0.78);
+        int i = 0;
+        while (i < raw.Length)
+        {
+            bool isLower = char.IsLower(raw[i]);
+            int j = i + 1;
+            while (j < raw.Length && char.IsLower(raw[j]) == isLower) j++;
+            var runText = raw.Substring(i, j - i).ToUpper();
+            tb.Inlines.Add(new System.Windows.Documents.Run(runText)
+            {
+                FontSize = isLower ? smallSize : full
+            });
+            i = j;
+        }
+    }
+
+    /// <summary>Combine Underline + Strikethrough(s) into a WPF decoration collection.
+    /// DoubleStrikethrough renders as two parallel Strikethrough decorations offset
+    /// above and below the default strike position, matching how the flattened PDF
+    /// draws double strikes.</summary>
+    private static TextDecorationCollection BuildDecorations(PdfAnnotation a)
+    {
+        var d = new TextDecorationCollection();
+        if (a.Underline) d.Add(TextDecorations.Underline);
+        if (a.DoubleStrikethrough)
+        {
+            d.Add(new System.Windows.TextDecoration
+            {
+                Location = System.Windows.TextDecorationLocation.Strikethrough,
+                PenOffset = 1.5,
+                PenOffsetUnit = System.Windows.TextDecorationUnit.Pixel
+            });
+            d.Add(new System.Windows.TextDecoration
+            {
+                Location = System.Windows.TextDecorationLocation.Strikethrough,
+                PenOffset = -1.5,
+                PenOffsetUnit = System.Windows.TextDecorationUnit.Pixel
+            });
+        }
+        else if (a.Strikethrough)
+        {
+            d.Add(TextDecorations.Strikethrough);
+        }
+        return d;
+    }
 
     private static Color? ParseHexOrNull(string? hex)
     {

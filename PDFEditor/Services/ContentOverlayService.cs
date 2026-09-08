@@ -100,7 +100,10 @@ public class ContentOverlayService
         if (pageIndex < 0 || pageIndex >= doc.PageCount) throw new ArgumentOutOfRangeException(nameof(pageIndex));
         var page = doc.Pages[pageIndex];
         using var g = XGraphics.FromPdfPage(page, XGraphicsPdfPageOptions.Append);
-        using var img = XImage.FromFile(imagePath);
+        // Stream-based load so PdfSharpCore preserves PNG alpha (soft mask).
+        // XImage.FromFile on Windows takes a GDI+ path that flattens transparency.
+        var bytes = File.ReadAllBytes(imagePath);
+        using var img = XImage.FromStream(() => new MemoryStream(bytes));
         g.DrawImage(img, xNorm * page.Width.Point, yNorm * page.Height.Point,
                     widthNorm * page.Width.Point, heightNorm * page.Height.Point);
         return Save(doc);

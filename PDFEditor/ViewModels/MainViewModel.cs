@@ -244,6 +244,50 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private PageViewModel? currentPage;
     [ObservableProperty] private string statusText = "Ready. Open a PDF to begin.";
     [ObservableProperty] private string title = "ArtiMax PDF Editor";
+
+    // Count of other PDF Editor instances (updated on Window.Activated).
+    // When > 0 the title bar gets a " [N+1 windows]" suffix so the multi-window
+    // state is visible without opening the Windows menu.
+    [ObservableProperty] private int otherWindowCount;
+    partial void OnOtherWindowCountChanged(int value) => OnDocumentChanged();
+
+    // Left sidebar content selector. Thumbnails is the historical default;
+    // Tools swaps in a vertical list of every annotation tool. Hydrated
+    // from ViewSettings at construction; persists on change.
+    [ObservableProperty] private LeftPanelMode leftPanelMode = LeftPanelMode.Thumbnails;
+    partial void OnLeftPanelModeChanged(LeftPanelMode value)
+    {
+        ViewSettings.Settings.LeftPanelMode = value;
+        ViewSettings.Save();
+    }
+
+    // Compact mode for the Tools list surfaces (palette + sidebar). Hover
+    // tooltip still surfaces the tool name.
+    [ObservableProperty] private bool toolsIconsOnly;
+    partial void OnToolsIconsOnlyChanged(bool value)
+    {
+        ViewSettings.Settings.ToolsIconsOnly = value;
+        ViewSettings.Save();
+    }
+
+    [RelayCommand]
+    private void SetLeftPanelMode(string mode)
+    {
+        if (Enum.TryParse<LeftPanelMode>(mode, ignoreCase: true, out var m))
+            LeftPanelMode = m;
+    }
+
+    [RelayCommand]
+    private void ToggleToolsIconsOnly() => ToolsIconsOnly = !ToolsIconsOnly;
+
+    // Exposed to the Tools sidebar and floating palette so both bind to the
+    // same static catalog and stay in sync.
+    public ToolCatalogEntry[] ToolCatalogEntries => ToolCatalog.All;
+
+    // The catalog entry for the currently-active tool. Sidebar binds its
+    // SelectedItem here so the active row highlights automatically, and the
+    // floating palette compares against it for per-button highlighting.
+    public ToolCatalogEntry? CurrentToolEntry => ToolCatalog.All.FirstOrDefault(e => e.Mode == CurrentTool);
     [ObservableProperty] private bool isBusy;
     // Custom-mode multiplier: 1.0 == 100% Actual Size. Only affects the page
     // display when ZoomMode == Custom (percentage picked from the toolbar).
@@ -284,6 +328,9 @@ public partial class MainViewModel : ObservableObject
         {
             CurrentShapeTool = value;
         }
+        // Sidebar and floating palette bind to CurrentToolEntry to highlight
+        // the active row — notify so they refresh when the tool changes.
+        OnPropertyChanged(nameof(CurrentToolEntry));
     }
     [ObservableProperty] private Color currentColor = Colors.Black;
 
@@ -427,6 +474,9 @@ public partial class MainViewModel : ObservableObject
             currentColor = c;
         }
         catch { }
+        // Tool-surface preferences (mode + icons-only).
+        leftPanelMode = ViewSettings.Settings.LeftPanelMode;
+        toolsIconsOnly = ViewSettings.Settings.ToolsIconsOnly;
         RefreshOcrLanguages();
     }
 
@@ -444,9 +494,12 @@ public partial class MainViewModel : ObservableObject
         if (d != null && !d.CheckAccess()) { d.Invoke(OnDocumentChanged); return; }
 
         HasDocument = _doc.Bytes != null;
-        Title = _doc.FilePath is null
+        var baseTitle = _doc.FilePath is null
             ? "ArtiMax PDF Editor"
             : $"ArtiMax PDF Editor - {Path.GetFileName(_doc.FilePath)}{(_doc.IsDirty ? " *" : "")}";
+        Title = OtherWindowCount > 0
+            ? $"{baseTitle}  [{OtherWindowCount + 1} windows]"
+            : baseTitle;
         StatusText = HasDocument
             ? $"{_doc.PageCount} page{(_doc.PageCount == 1 ? "" : "s")}."
             : "Ready.";
@@ -538,10 +591,49 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task Open()
     {
-        if (!await ConfirmDiscardChangesAsync()) return;
         var dlg = new OpenFileDialog { Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*" };
         if (dlg.ShowDialog() != true) return;
-        await LoadFileAsync(path: dlg.FileName, checkDirty: false);
+        await OpenFileInAppropriateWindow(dlg.FileName);
+    }
+
+    // Central routing for user-driven file opens. If this window already has
+    // a document loaded, spawn a NEW instance for the new file so the user's
+    // current work stays visible — the two files then live side-by-side, one
+    // per window, and both windows' "Windows" menus enumerate the pair.
+    // If this window is empty, load in place (no wasted empty window).
+    public async Task OpenFileInAppropriateWindow(string path)
+    {
+        if (HasDocument)
+        {
+            SpawnInstanceFor(path);
+            return;
+        }
+        await LoadFileAsync(path, checkDirty: false);
+    }
+
+    private void SpawnInstanceFor(string filePath)
+    {
+        try
+        {
+            var exePath = Environment.ProcessPath
+                          ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                MessageBox.Show("Could not locate the PDF Editor executable to open a new window.",
+                                "Open in new window", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var psi = new System.Diagnostics.ProcessStartInfo(exePath, $"\"{filePath}\"")
+            {
+                UseShellExecute = false
+            };
+            System.Diagnostics.Process.Start(psi);
+            StatusText = $"Opened '{Path.GetFileName(filePath)}' in a new window.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Failed to open new window", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     public Task LoadFileAsync(string path) => LoadFileAsync(path, checkDirty: true);
@@ -584,7 +676,7 @@ public partial class MainViewModel : ObservableObject
             MessageBox.Show($"File no longer exists:\n{path}", "ArtiMax PDF Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        await LoadFileAsync(path);
+        await OpenFileInAppropriateWindow(path);
     }
 
     [RelayCommand]
@@ -638,6 +730,13 @@ public partial class MainViewModel : ObservableObject
         for (int i = 0; i < overlaysSnapshot.Count && i < Pages.Count; i++)
             foreach (var a in overlaysSnapshot[i])
                 Pages[i].Annotations.Add(a);
+        // A byte-level change is a checkpoint. Any prior overlay-level undo
+        // actions closed over now-defunct PageViewModel refs (Rebuild
+        // recreated them), so keeping them on the stack would make Ctrl+Z
+        // fire against dead state instead of reversing this byte change.
+        // Clear them and let Ctrl+Z reach the byte-level frame we just pushed.
+        _annotationUndos.Clear();
+        UndoCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Two-phase round-trip. Phase 1 (before rebuild): extract every native
@@ -1726,6 +1825,111 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task NormalizeCheckboxSizes()
+    {
+        if (_doc.Bytes is null) return;
+        try
+        {
+            IsBusy = true;
+            // Gather sizes from unsaved overlays (per-page normalized × page point-size)
+            // and from any AcroForm checkbox widgets already in the PDF.
+            var pool = new List<double>();
+            var overlayCheckboxes = new List<Models.PdfAnnotation>();
+            foreach (var page in Pages)
+            {
+                foreach (var a in page.Annotations)
+                {
+                    if (a.Kind != Models.AnnotationKind.CheckboxField) continue;
+                    overlayCheckboxes.Add(a);
+                    // Point size = normalized × page.WidthPt / page.HeightPt.
+                    // Checkbox is drawn as a visual square, so width×pageWpt == height×pageHpt.
+                    var sidePt = a.Width * page.WidthPt;
+                    if (sidePt > 0) pool.Add(sidePt);
+                }
+            }
+            var widgetSizes = await Task.Run(() => _forms.GetCheckboxSizes(_doc.Bytes!));
+            pool.AddRange(widgetSizes);
+            if (pool.Count == 0)
+            {
+                MessageBox.Show("No checkboxes found on this document to normalize.",
+                    "Match Checkbox Sizes", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            pool.Sort();
+            var median = pool[pool.Count / 2];
+
+            // Apply median to overlays. Overlay is normalized, so divide by page dims.
+            int changedOverlays = 0;
+            foreach (var a in overlayCheckboxes)
+            {
+                var page = Pages[a.PageIndex];
+                var wNorm = median / page.WidthPt;
+                var hNorm = median / page.HeightPt;
+                if (System.Math.Abs(a.Width - wNorm) > 0.0002 || System.Math.Abs(a.Height - hNorm) > 0.0002)
+                {
+                    a.Width  = wNorm;
+                    a.Height = hNorm;
+                    changedOverlays++;
+                }
+            }
+            if (changedOverlays > 0)
+            {
+                // Trigger overlay refresh so all annotation layers redraw.
+                foreach (var page in Pages) page.RaiseAnnotationChanged();
+            }
+
+            // Apply median to any AcroForm widgets in the saved bytes.
+            int changedWidgets = 0;
+            if (widgetSizes.Length > 0)
+            {
+                var result = await Task.Run(() => _forms.SetAllCheckboxSizes(_doc.Bytes!, median));
+                changedWidgets = result.Changed;
+                if (changedWidgets > 0)
+                {
+                    await ApplyBytesPreservingOverlaysAsync(result.Bytes,
+                        $"Normalize checkbox sizes ({changedWidgets} form field(s))");
+                }
+            }
+
+            StatusText = $"Normalized {changedOverlays + changedWidgets} checkbox(es) to {median:0.#} pt.";
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Normalize failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task CheckAllBoxes()
+    {
+        if (_doc.Bytes is null) return;
+        try
+        {
+            IsBusy = true;
+            var result = await Task.Run(() => _forms.CheckAllBoxes(_doc.Bytes!));
+            if (result.TotalCheckboxes == 0)
+            {
+                MessageBox.Show(
+                    "This PDF has no AcroForm checkbox fields — nothing to check.\n\n" +
+                    "If the checkboxes are drawn graphics (e.g. a scanned or printed form), " +
+                    "template-match \"check all\" is not yet available. As a workaround: " +
+                    "use the Tick tool and click each box, or copy a ✓ and right-click → " +
+                    "Paste text at each location.",
+                    "Check All Boxes", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (result.Changed == 0)
+            {
+                StatusText = $"All {result.TotalCheckboxes} checkbox field(s) already checked.";
+                return;
+            }
+            await ApplyBytesPreservingOverlaysAsync(result.Bytes,
+                $"Check all boxes ({result.Changed} of {result.TotalCheckboxes})");
+            StatusText = $"Checked {result.Changed} of {result.TotalCheckboxes} checkbox field(s). Save to persist.";
+        }
+        catch (Exception ex) { MessageBox.Show(ex.Message, "Check All Boxes failed", MessageBoxButton.OK, MessageBoxImage.Error); }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task FillForm()
     {
         if (_doc.Bytes is null) return;
@@ -2444,6 +2648,8 @@ public partial class MainViewModel : ObservableObject
         OcrAllPagesCommand.NotifyCanExecuteChanged();
         MakeSearchablePdfCommand.NotifyCanExecuteChanged();
         FillFormCommand.NotifyCanExecuteChanged();
+        CheckAllBoxesCommand.NotifyCanExecuteChanged();
+        NormalizeCheckboxSizesCommand.NotifyCanExecuteChanged();
         DrawSignatureCommand.NotifyCanExecuteChanged();
         LoadSignatureImageCommand.NotifyCanExecuteChanged();
         OpenSignatureLibraryCommand.NotifyCanExecuteChanged();

@@ -18,5 +18,8 @@ public enum ToolMode
     RectangleFilled,
     EllipseFilled,
     Bullet,
-    Callout
+    Callout,
+    /// <summary>Drag a rectangle to place a new interactive AcroForm
+    /// checkbox field on the page. Written into doc.AcroForm at save time.</summary>
+    InsertCheckbox
 }

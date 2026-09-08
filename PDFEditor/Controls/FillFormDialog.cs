@@ -13,7 +13,7 @@ public static class FillFormDialog
         var w = new Window
         {
             Title = "Fill Form",
-            Width = 520, Height = 500,
+            Width = 560, Height = 560,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = Application.Current?.MainWindow,
             ShowInTaskbar = false
@@ -23,8 +23,10 @@ public static class FillFormDialog
         {
             Text = fields.Count == 0
                 ? "This PDF has no AcroForm fields."
-                : $"Edit values for {fields.Count} field(s). Blank values are left unchanged.",
-            Margin = new Thickness(0, 0, 0, 8)
+                : $"Edit values for {fields.Count} field(s). Text fields left blank are unchanged; " +
+                  "checkbox state is applied as shown.",
+            Margin = new Thickness(0, 0, 0, 8),
+            TextWrapping = TextWrapping.Wrap
         };
         DockPanel.SetDock(head, Dock.Top);
 
@@ -34,14 +36,37 @@ public static class FillFormDialog
         btns.Children.Add(ok); btns.Children.Add(cancel);
         DockPanel.SetDock(btns, Dock.Bottom);
 
-        var editors = new Dictionary<string, TextBox>();
+        // Two parallel dictionaries so the readout on Apply is simple.
+        var textEditors = new Dictionary<string, TextBox>();
+        var checkEditors = new Dictionary<string, CheckBox>();
+
         var stack = new StackPanel();
         foreach (var f in fields)
         {
-            stack.Children.Add(new TextBlock { Text = $"{f.Name}   ({f.TypeName})", Margin = new Thickness(0, 8, 0, 2), FontWeight = FontWeights.SemiBold });
-            var tb = new TextBox { Text = f.Value ?? "" };
-            editors[f.Name] = tb;
-            stack.Children.Add(tb);
+            if (f.Kind == FormFieldKind.Checkbox)
+            {
+                var cb = new CheckBox
+                {
+                    Content = $"{f.Name}   (Checkbox)",
+                    IsChecked = IsCheckedRaw(f.Value),
+                    Margin = new Thickness(0, 8, 0, 2),
+                    FontWeight = FontWeights.SemiBold
+                };
+                checkEditors[f.Name] = cb;
+                stack.Children.Add(cb);
+            }
+            else
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"{f.Name}   ({f.TypeName})",
+                    Margin = new Thickness(0, 8, 0, 2),
+                    FontWeight = FontWeights.SemiBold
+                });
+                var tb = new TextBox { Text = f.Value ?? "" };
+                textEditors[f.Name] = tb;
+                stack.Children.Add(tb);
+            }
         }
         var scroll = new ScrollViewer { Content = stack, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
@@ -53,10 +78,24 @@ public static class FillFormDialog
         Dictionary<string, string>? result = null;
         ok.Click += (_, _) =>
         {
-            result = editors.Where(kv => !string.IsNullOrEmpty(kv.Value.Text))
-                            .ToDictionary(kv => kv.Key, kv => kv.Value.Text);
+            var dict = new Dictionary<string, string>();
+            // Text fields: only include non-empty values (blank = leave alone).
+            foreach (var kv in textEditors)
+                if (!string.IsNullOrEmpty(kv.Value.Text))
+                    dict[kv.Key] = kv.Value.Text;
+            // Checkboxes: always include — the user's state is definitive.
+            foreach (var kv in checkEditors)
+                dict[kv.Key] = kv.Value.IsChecked == true ? "true" : "false";
+            result = dict;
             w.DialogResult = true;
         };
         return w.ShowDialog() == true ? result : null;
+    }
+
+    private static bool IsCheckedRaw(string? v)
+    {
+        if (string.IsNullOrEmpty(v)) return false;
+        var s = v.Trim().TrimStart('/').ToLowerInvariant();
+        return s == "true" || s == "yes" || s == "on" || s == "1" || s == "checked";
     }
 }

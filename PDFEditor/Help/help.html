@@ -188,7 +188,7 @@
 <div class="layout">
   <nav>
     <h1>ArtiMax PDF Editor</h1>
-    <div class="sub">Help &amp; reference · v1.0.2</div>
+    <div class="sub">Help &amp; reference · v1.0.27</div>
     <ul>
       <li><a href="#disclaimer">Disclaimer</a></li>
       <li><a href="#overview">Overview</a></li>
@@ -372,7 +372,16 @@
       <li>Alignment — Left / Center / Right / Justify</li>
       <li>Text colour</li>
       <li><strong>Background colour</strong> — pick a swatch, hex value, or click <strong>None</strong> for transparent (the default for text stamps)</li>
+      <li><strong>Effects</strong> — Strikethrough, Double Strikethrough, Superscript, Subscript, Small Caps, All Caps. Each pair (single/double strike, super/sub, small/all caps) is mutually exclusive — ticking one auto-clears the other.</li>
     </ul>
+    <p><strong>Effects notes.</strong> Small Caps renders lowercase letters as smaller capital
+      letters (about 78% of the base font); All Caps folds everything to uppercase at full size.
+      Superscript / Subscript shrink the type to 70% and shift the baseline. Strikethrough draws
+      one line through the text; Double Strikethrough draws two parallel lines. Effects
+      round-trip through Save → Reopen for Sticky Notes and Callouts (stored in
+      <code>/ArtiMaxStrikethrough</code>, <code>/ArtiMaxSuperscript</code>, etc.) — for
+      standalone Text stamps the effects render into the flattened page but don't come back as
+      editable dialog state (a stamp becomes page pixels on save).</p>
     <p>On OK, the stamp is dropped, the tool auto-reverts to Select, and the new stamp is selected.
       The next time you open the Text dialog for a <em>new</em> stamp it pre-fills with your
       last-used font, size, weight, and alignment. Double-clicking an existing stamp reopens
@@ -412,6 +421,24 @@
       <strong>Shape&nbsp;▾</strong> split-button (which also holds Draw). Pick a variant; the
       button remembers your last choice for one-click reuse. Drag to draw the shape at the
       current colour and thickness. Filled variants ignore thickness and paint the interior.</p>
+
+    <h3 id="tool-checkbox">Checkbox (interactive form field)</h3>
+    <p>The <strong>Checkbox</strong> tool lives in the floating <a href="#palette">Tool Palette</a>
+      (not the main toolbar). Drag on a page to place an interactive AcroForm checkbox field.
+      The drag is constrained to a square. On save the placeholder becomes a real
+      <code>/Widget</code> annotation in the PDF's AcroForm — clickable in Adobe Reader, Chrome,
+      Edge, and any viewer with form support.</p>
+    <ul>
+      <li><strong>Sticky size.</strong> After your first checkbox drag, the next single click
+        drops a same-size box at that point — great for laying out a run of identical checkboxes.
+        Any real drag both places at the dragged size <em>and</em> updates the sticky template.</li>
+      <li><strong>Match Checkbox Sizes.</strong> <em>Tools → Match Checkbox Sizes</em> resizes
+        every checkbox in the document (unsaved overlays + saved form fields) to the median of
+        their current sizes, anchored at each box's top-left. Use it after you've placed several
+        boxes with slightly different sizes to tidy them up in one pass.</li>
+      <li><strong>Ticking on save.</strong> <em>Tools → Check All Boxes</em> ticks every checkbox
+        field in the document (see <a href="#forms">Forms</a>).</li>
+    </ul>
 
     <h3 id="tool-whiteout">Whiteout</h3>
     <p>Drag to cover an area with a solid white box. Useful for hiding a piece of text before
@@ -478,9 +505,14 @@
     <ul>
       <li><strong>Tools → Signatures…</strong> opens the Signature Library. Draw a new signature
         with the mouse, or load one from an image file. Named signatures are stored in
-        <code>%AppData%\PDFEditor\signatures\</code> and reused across sessions.</li>
+        <code>%AppData%\ArtiMaxPDFEditor\signatures\</code> and reused across sessions.</li>
       <li><strong>Draw signature</strong> lets you sketch a one-off signature that isn't saved.</li>
     </ul>
+    <div class="note"><strong>Transparent backgrounds.</strong> Imported signature images
+      (photos of pen on paper, opaque PNG scans) run through a white-to-alpha filter on import
+      and are stored as transparent PNGs, so the strokes appear over the page content without
+      an opaque white rectangle behind them. Drawn signatures are already transparent.
+      Existing opaque signatures in your library are re-processed on first launch after upgrade.</div>
 
     <h2 id="pages">Page operations</h2>
     <table>
@@ -611,11 +643,55 @@
         it's overlaid onto the page and flattened.</li>
     </ul>
 
-    <h2 id="forms">Fill forms</h2>
-    <p><strong>Tools → Fill Form…</strong> reads AcroForm fields from the PDF and shows them in a
-      dialog. Edit values and click OK; the app writes them back to the PDF.</p>
-    <div class="note">XFA forms (Adobe's XML-based dynamic forms) are not supported — most modern
-      forms use AcroForm and work.</div>
+    <h2 id="forms">Forms</h2>
+    <p>Three commands under <strong>Tools →</strong> operate on AcroForm form fields.</p>
+
+    <h3 id="form-fillform">Fill Form…</h3>
+    <p>Reads every AcroForm field in the current PDF and shows a dialog listing them all —
+      one row per field, each labelled with its <code>field_name (FieldType)</code>. Use it to
+      populate a blank form or edit an already-filled one.</p>
+    <p><strong>How to use it:</strong></p>
+    <ol>
+      <li>Open a PDF that has form fields. <em>Tools → Fill Form…</em>.</li>
+      <li><strong>Text fields</strong> appear as text boxes prefilled with the current value.
+        Type the value you want. Leave a text box blank to leave that field <em>unchanged</em>
+        (blank does not clear).</li>
+      <li><strong>Checkbox fields</strong> appear as real WPF checkboxes reflecting the current
+        state. Tick or untick — the state you leave the box in is applied verbatim on Apply.</li>
+      <li>Click <strong>Apply</strong>. The status bar reports how many fields were written.</li>
+      <li><kbd>Ctrl</kbd>+<kbd>S</kbd> to persist to disk. <kbd>Ctrl</kbd>+<kbd>Z</kbd> reverses
+        the whole fill in one step.</li>
+    </ol>
+
+    <h3 id="form-checkall">Check All Boxes</h3>
+    <p>Ticks every AcroForm checkbox in the document in one click — skips the dialog entirely.
+      Works only on real form checkboxes. Legacy checkboxes that were written before <em>/FT
+      /Btn</em> was set get repaired on the fly. If the PDF has no checkbox fields, you get an
+      "nothing to check" message with a workaround hint (use the Tick tool or place proper
+      form checkboxes first).</p>
+
+    <h3 id="form-matchsize">Match Checkbox Sizes</h3>
+    <p>Resizes every checkbox in the document (unsaved overlays + saved form widgets) to the
+      <em>median</em> of their current sizes, anchored at each box's top-left. Handy after a
+      batch of drag-placed boxes ended up slightly different sizes. Reports total and changed
+      counts in the status bar. Undoable.</p>
+
+    <h3 id="form-newcheckbox">Adding new checkbox fields</h3>
+    <p>Draw new interactive checkboxes with the <a href="#tool-checkbox">Checkbox tool</a> in
+      the floating <a href="#palette">Tool Palette</a>. Drag on the page to place; on Save the
+      placeholder becomes a real form field that Fill Form and Check All Boxes then recognise.</p>
+
+    <div class="note"><strong>Not supported:</strong>
+      <ul>
+        <li><strong>XFA forms</strong> (Adobe's XML-based dynamic forms) — most modern forms are
+          AcroForm and work fine.</li>
+        <li><strong>Radio buttons and combo/list boxes</strong> — they'll appear in the dialog
+          as plain text rows, but edits to them aren't applied. If you need those field types,
+          ask and I'll add them.</li>
+        <li><strong>Field-specific validation.</strong> Every text row is a plain text box —
+          date and number formats aren't validated.</li>
+      </ul>
+    </div>
 
     <h2 id="security">Security</h2>
     <ul>
@@ -647,6 +723,42 @@
       preserved across the rewind.</p>
 
     <hr>
+
+    <h2 id="palette">Tool Palette (floating)</h2>
+    <p><strong>View → Tool Palette</strong> (or <kbd>F4</kbd>) opens a small floating window
+      that mirrors every annotation tool plus a shared colour swatch and quick-access
+      <em>Image</em> / <em>Signature</em> actions. Useful when the toolbar is off-screen or you
+      want the tools next to the page you're working on.</p>
+    <ul>
+      <li><strong>Follows the app.</strong> Drag the main window to another monitor and the
+        palette moves with it. It only sits above other apps while PDF Editor is the active app —
+        Alt-Tab to Excel and the palette drops behind naturally.</li>
+      <li><strong>Icons only.</strong> <em>View → Tools Icons Only</em> hides the labels for a
+        compact palette; hovering an icon shows its name and description.</li>
+      <li><strong>Colour swatch.</strong> The cell at the top of the palette shows the current
+        annotation colour. Click it for the 12-swatch grid + Custom picker — the same palette
+        the toolbar uses. Both surfaces stay in sync.</li>
+      <li><strong>Persists.</strong> Open/closed state, position, icons-only mode all survive
+        across launches (stored in <code>%APPDATA%\ArtiMaxPDFEditor\view.json</code>).</li>
+    </ul>
+
+    <h2 id="windows">Multiple windows</h2>
+    <p>Opening a file from <em>File → Open</em> (or a recent, or drag-drop) while another PDF is
+      already loaded in this window spawns a <strong>new PDF Editor instance</strong> for the new
+      file — the current file stays visible in this window. The title bar of each window shows
+      <code>[N windows]</code> when more than one is open.</p>
+    <ul>
+      <li><strong>Windows menu</strong> lists every open instance and lets you jump to any of
+        them. <kbd>Ctrl</kbd>+<kbd>Tab</kbd> cycles.</li>
+      <li><strong>Close All Windows</strong> at the bottom of that menu sends a Close to every
+        instance (each still prompts to save unsaved changes).</li>
+    </ul>
+
+    <h2 id="paste">Right-click Paste</h2>
+    <p>Right-click on a page for a small menu with <strong>Paste text</strong> and
+      <strong>Paste image</strong>. If your clipboard has text, Paste text drops a text stamp at
+      the click point. If it has an image, Paste image saves it as PNG and drops it as an image
+      annotation. Both are undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
 
     <h2 id="theme">Themes</h2>
     <p><strong>View → Theme → Dark / Light</strong>. The choice is stored in
@@ -734,6 +846,10 @@
       <tr><td>Double-click annotation</td><td>Edit (Text/Note)</td></tr>
       <tr><td><kbd>Delete</kbd></td><td>Delete selected annotation</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Deselect current annotation</td></tr>
+      <tr><td><kbd>F1</kbd></td><td>Open this Help file</td></tr>
+      <tr><td><kbd>F4</kbd></td><td>Toggle floating <a href="#palette">Tool Palette</a></td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Cycle through open PDF Editor windows</td></tr>
+      <tr><td>Right-click on page</td><td><a href="#paste">Paste text / Paste image</a> at click point</td></tr>
     </table>
 
     <h2 id="tips">Tips &amp; known limitations</h2>
