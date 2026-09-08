@@ -1188,6 +1188,25 @@ public class AnnotationLayer : Canvas
                     System.Windows.Threading.DispatcherPriority.Loaded);
                 return;
             }
+            // Plain click with Select tool — attempt to toggle an AcroForm
+            // checkbox whose /Rect contains the click. If nothing hits, this
+            // is a no-op (no rebuild) and the click just clears any lingering
+            // draft, matching prior behaviour.
+            if (currentTool == ToolMode.Select && MainVM != null && Page != null)
+            {
+                var pw = Page.PixelWidth  > 0 ? Page.PixelWidth  : ActualWidth;
+                var ph = Page.PixelHeight > 0 ? Page.PixelHeight : ActualHeight;
+                if (pw > 0 && ph > 0)
+                {
+                    var clickNx = System.Math.Clamp(_dragStart.X / pw, 0, 1);
+                    var clickNy = System.Math.Clamp(_dragStart.Y / ph, 0, 1);
+                    var pageIdxLocal = Page.PageIndex;
+                    var vm = MainVM;
+                    // Fire-and-forget: TryToggleFormCheckboxAt does a byte-level
+                    // rebuild ONLY on hit, so a miss costs a cheap dict walk.
+                    _ = vm.TryToggleFormCheckboxAt(pageIdxLocal, clickNx, clickNy);
+                }
+            }
             _drafting = null;
             Rebuild();
             return;

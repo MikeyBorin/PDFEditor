@@ -188,7 +188,7 @@
 <div class="layout">
   <nav>
     <h1>ArtiMax PDF Editor</h1>
-    <div class="sub">Help &amp; reference · v1.0.27</div>
+    <div class="sub">Help &amp; reference · v1.0.32</div>
     <ul>
       <li><a href="#disclaimer">Disclaimer</a></li>
       <li><a href="#overview">Overview</a></li>
@@ -663,12 +663,17 @@
         the whole fill in one step.</li>
     </ol>
 
-    <h3 id="form-checkall">Check All Boxes</h3>
-    <p>Ticks every AcroForm checkbox in the document in one click — skips the dialog entirely.
-      Works only on real form checkboxes. Legacy checkboxes that were written before <em>/FT
-      /Btn</em> was set get repaired on the fly. If the PDF has no checkbox fields, you get an
-      "nothing to check" message with a workaround hint (use the Tick tool or place proper
-      form checkboxes first).</p>
+    <h3 id="form-checkall">Check All Boxes / Uncheck All Boxes</h3>
+    <p>Two symmetric commands under Tools. <strong>Check All Boxes</strong> ticks every
+      AcroForm checkbox in the document in one click; <strong>Uncheck All Boxes</strong>
+      clears every one. Both skip the Fill Form dialog. Legacy checkboxes written before
+      <em>/FT /Btn</em> was set get repaired on the fly. If the PDF has no checkbox fields,
+      you get a "nothing to check / uncheck" message.</p>
+    <p>To toggle <em>individual</em> checkboxes: with the <strong>Select</strong> tool active,
+      just click on the checkbox in the page view — it toggles between checked and unchecked.
+      Each click is undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>. You can also use
+      <a href="#form-fillform">Fill Form…</a> (checkboxes appear as WPF checkboxes in the
+      dialog), or open the saved PDF in an external viewer (Adobe Reader / Chrome / Edge).</p>
 
     <h3 id="form-matchsize">Match Checkbox Sizes</h3>
     <p>Resizes every checkbox in the document (unsaved overlays + saved form widgets) to the
@@ -735,6 +740,11 @@
         Alt-Tab to Excel and the palette drops behind naturally.</li>
       <li><strong>Icons only.</strong> <em>View → Tools Icons Only</em> hides the labels for a
         compact palette; hovering an icon shows its name and description.</li>
+      <li><strong>Customise which tools appear.</strong> Right-click on the palette (or
+        <em>View → Customise Palette…</em>) opens a checklist of every tool. Untick the ones
+        you don't use; the palette shrinks to fit. The toolbar is unaffected — it stays as a
+        comprehensive fallback for anything you leave off the palette. Persists in
+        <code>view.json</code>.</li>
       <li><strong>Colour swatch.</strong> The cell at the top of the palette shows the current
         annotation colour. Click it for the 12-swatch grid + Custom picker — the same palette
         the toolbar uses. Both surfaces stay in sync.</li>
@@ -851,6 +861,23 @@
       <tr><td><kbd>Ctrl</kbd>+<kbd>Tab</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Cycle through open PDF Editor windows</td></tr>
       <tr><td>Right-click on page</td><td><a href="#paste">Paste text / Paste image</a> at click point</td></tr>
     </table>
+
+    <h2 id="requesting-features">Requesting features</h2>
+    <p>Some menu items appear <strong>greyed out</strong> — those are placeholders: features
+      that are technically feasible but haven't been built yet. Hover to see the tooltip
+      describing what the feature would do and how to ask for it.</p>
+    <p>Current placeholders:</p>
+    <ul>
+      <li><strong>Tools → Insert Text Field…</strong> — drag-to-place interactive AcroForm
+        text-input field, sibling to the existing <a href="#tool-checkbox">Checkbox tool</a>.
+        Would support Multiline / Password / MaxLen / Read-only / Required flags, plus an
+        optional Format category (Number / Date / Currency / Percent) via Adobe's standard
+        JavaScript actions. Rough estimate: about a day of work.</li>
+    </ul>
+    <p>To request a feature (placeholder or otherwise), email
+      <a href="mailto:support@artimax.com.au">support@artimax.com.au</a> or open an issue at
+      <a href="https://github.com/MikeyBorin/PDFEditor/issues">github.com/MikeyBorin/PDFEditor/issues</a>.
+      Mention what problem you're solving and how you'd use it — that helps prioritise.</p>
 
     <h2 id="tips">Tips &amp; known limitations</h2>
     <ul>

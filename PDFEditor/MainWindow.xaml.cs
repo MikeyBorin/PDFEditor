@@ -680,13 +680,55 @@ public partial class MainWindow : Window
         WindowsMenu.Items.Add(new Separator());
         foreach (var inst in others)
         {
+            // Row is filename + trailing X button. Clicking the row switches
+            // to that window; clicking the X sends WM_CLOSE to it (which the
+            // target respects with the usual save-changes prompt).
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock
+            {
+                Text = inst.FileLabel,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(label, 0);
+            row.Children.Add(label);
+
+            var closeBtn = new Button
+            {
+                Content = "✕",
+                Width = 20, Height = 18,
+                Padding = new Thickness(0),
+                Margin = new Thickness(12, 0, 0, 0),
+                FontSize = 11,
+                Background = System.Windows.Media.Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Close this window (prompts if unsaved)",
+                Focusable = false
+            };
+            Grid.SetColumn(closeBtn, 1);
+            row.Children.Add(closeBtn);
+
             var mi = new MenuItem
             {
-                Header = inst.FileLabel,
+                Header = row,
                 ToolTip = $"PID {inst.ProcessId} · {inst.FullTitle}"
             };
             var hwnd = inst.Hwnd;
             mi.Click += (_, _) => Services.InstanceSwitcherService.Activate(hwnd);
+
+            // Handler for the X. StaysOpenOnClick keeps the menu open so you
+            // can close several in a row; we mark the event handled so the
+            // enclosing MenuItem.Click (switch-to) doesn't also fire.
+            closeBtn.Click += (_, ev) =>
+            {
+                Services.InstanceSwitcherService.RequestClose(hwnd);
+                ev.Handled = true;
+                // Rebuild the submenu so the closed row disappears immediately.
+                Dispatcher.BeginInvoke(new System.Action(() => WindowsMenu_SubmenuOpened(sender, e)));
+            };
+
             WindowsMenu.Items.Add(mi);
         }
 
@@ -728,6 +770,9 @@ public partial class MainWindow : Window
     private Controls.ToolPaletteWindow? _toolPalette;
 
     private void ToolPaletteMenuItem_Click(object sender, RoutedEventArgs e) => ToggleToolPalette();
+
+    private void CustomisePalette_Click(object sender, RoutedEventArgs e)
+        => Controls.PaletteCustomiseDialog.Show(VM);
 
     private void ToggleToolPalette()
     {
@@ -785,7 +830,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.27\n\n" +
+            "ArtiMax PDF Editor  v1.0.32\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +

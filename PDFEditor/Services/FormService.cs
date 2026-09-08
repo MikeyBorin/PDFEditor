@@ -64,21 +64,24 @@ public class FormService
 
     public record CheckAllResult(byte[] Bytes, int TotalCheckboxes, int Changed);
 
-    /// <summary>Sets every AcroForm checkbox in the document to Checked=true.
-    /// Returns the new PDF bytes plus counts so the caller can report what
-    /// happened. If the PDF has no AcroForm or no checkbox fields,
-    /// TotalCheckboxes will be 0 and the original bytes are returned unchanged.</summary>
-    public CheckAllResult CheckAllBoxes(byte[] pdfBytes)
+    /// <summary>Sets every AcroForm checkbox in the document to Checked=true.</summary>
+    public CheckAllResult CheckAllBoxes(byte[] pdfBytes) => SetAllCheckboxes(pdfBytes, checkedState: true);
+
+    /// <summary>Sets every AcroForm checkbox in the document to Checked=false.</summary>
+    public CheckAllResult UncheckAllBoxes(byte[] pdfBytes) => SetAllCheckboxes(pdfBytes, checkedState: false);
+
+    /// <summary>Shared implementation for Check All / Uncheck All. Operates on
+    /// raw dicts so legacy fields written without /FT are handled the same as
+    /// typed PdfCheckBoxField instances. Reads each field's actual "on" state
+    /// name from /AP /N so PDFs authored with export values other than "/Yes"
+    /// still work.</summary>
+    private CheckAllResult SetAllCheckboxes(byte[] pdfBytes, bool checkedState)
     {
         using var ms = new MemoryStream(pdfBytes);
         var doc = PdfReader.Open(ms, PdfDocumentOpenMode.Modify);
         var form = doc.AcroForm;
         if (form == null) return new CheckAllResult(pdfBytes, 0, 0);
 
-        // NeedAppearances tells the viewer to regenerate the /AP dictionary
-        // when displaying the field. Without it, viewers may render the
-        // checkbox in its stale (un-checked) appearance even though the
-        // /V (value) has been updated.
         if (!form.Elements.ContainsKey("/NeedAppearances"))
             form.Elements.Add("/NeedAppearances", new PdfBoolean(true));
         else
@@ -87,15 +90,25 @@ public class FormService
         int total = 0, changed = 0;
         foreach (var name in form.Fields.Names)
         {
-            if (form.Fields[name] is PdfCheckBoxField cb)
-            {
-                total++;
-                if (!cb.Checked)
-                {
-                    cb.Checked = true;
-                    changed++;
-                }
-            }
+            var field = form.Fields[name];
+            if (field == null) continue;
+            var ft = field.Elements.GetName("/FT");
+            var ff = field.Elements.ContainsKey("/Ff") ? field.Elements.GetInteger("/Ff") : 0;
+            bool isBtnCheckbox =
+                (ft == "/Btn" && (ff & (1 << 15)) == 0 && (ff & (1 << 16)) == 0)
+                || (string.IsNullOrEmpty(ft) && LooksLikeCheckboxStateValue(field));
+            if (!isBtnCheckbox) continue;
+
+            total++;
+            var onName = FindOnStateName(field) ?? "/Yes";
+            var targetState = checkedState ? onName : "/Off";
+            var currentV = field.Elements.ContainsKey("/V") ? field.Elements["/V"]?.ToString() : null;
+            if (currentV == targetState) continue;
+
+            if (string.IsNullOrEmpty(ft)) field.Elements.SetName("/FT", "/Btn");
+            field.Elements.SetName("/V",  targetState);
+            field.Elements.SetName("/AS", targetState);
+            changed++;
         }
         if (total == 0) return new CheckAllResult(pdfBytes, 0, 0);
         using var output = new MemoryStream();
@@ -235,6 +248,86 @@ public class FormService
         using var output = new MemoryStream();
         doc.Save(output, false);
         return output.ToArray();
+    }
+
+    public record ToggleResult(byte[] Bytes, bool Changed, string? FieldName, bool NowChecked);
+
+    /// <summary>Finds the topmost AcroForm checkbox widget on the given page
+    /// whose /Rect contains the click point (in normalized top-left-origin
+    /// page coords) and toggles its /V and /AS. Returns Changed=false when
+    /// the click doesn't hit a checkbox — no rebuild needed.</summary>
+    public ToggleResult TryToggleCheckboxAt(byte[] pdfBytes, int pageIndex, double xNorm, double yNorm)
+    {
+        using var ms = new MemoryStream(pdfBytes);
+        var doc = PdfReader.Open(ms, PdfDocumentOpenMode.Modify);
+        if (pageIndex < 0 || pageIndex >= doc.PageCount)
+            return new ToggleResult(pdfBytes, false, null, false);
+        var page = doc.Pages[pageIndex];
+        var pageW = page.Width.Point;
+        var pageH = page.Height.Point;
+        // Click in PDF-space (bottom-left origin).
+        var clickX = xNorm * pageW;
+        var clickY = pageH - yNorm * pageH;
+
+        if (!page.Elements.ContainsKey("/Annots")) return new ToggleResult(pdfBytes, false, null, false);
+        var annots = page.Elements.GetArray("/Annots");
+        if (annots == null) return new ToggleResult(pdfBytes, false, null, false);
+
+        // Walk in reverse so the latest-drawn widget wins on overlap.
+        for (int i = annots.Elements.Count - 1; i >= 0; i--)
+        {
+            var d = ResolveDict(annots.Elements[i]);
+            if (d == null) continue;
+            if (d.Elements.GetName("/Subtype") != "/Widget") continue;
+            var ft = d.Elements.GetName("/FT");
+            var ff = d.Elements.ContainsKey("/Ff") ? d.Elements.GetInteger("/Ff") : 0;
+            bool isBtnCheckbox =
+                (ft == "/Btn" && (ff & (1 << 15)) == 0 && (ff & (1 << 16)) == 0)
+                || (string.IsNullOrEmpty(ft) && LooksLikeCheckboxStateValueDict(d));
+            if (!isBtnCheckbox) continue;
+            if (!d.Elements.ContainsKey("/Rect")) continue;
+            var rect = d.Elements.GetRectangle("/Rect");
+            if (clickX < rect.X1 || clickX > rect.X2) continue;
+            if (clickY < rect.Y1 || clickY > rect.Y2) continue;
+
+            // Hit — toggle.
+            var onName = FindOnStateNameDict(d) ?? "/Yes";
+            var currentV = d.Elements.ContainsKey("/V") ? d.Elements["/V"]?.ToString() : "/Off";
+            bool wasChecked = currentV == onName;
+            var newState = wasChecked ? "/Off" : onName;
+            if (string.IsNullOrEmpty(ft)) d.Elements.SetName("/FT", "/Btn");
+            d.Elements.SetName("/V",  newState);
+            d.Elements.SetName("/AS", newState);
+            var fieldName = d.Elements.ContainsKey("/T") ? d.Elements.GetString("/T") : "(unnamed)";
+            if (doc.AcroForm != null)
+                doc.AcroForm.Elements["/NeedAppearances"] = new PdfBoolean(true);
+            using var output = new MemoryStream();
+            doc.Save(output, false);
+            return new ToggleResult(output.ToArray(), true, fieldName, !wasChecked);
+        }
+        return new ToggleResult(pdfBytes, false, null, false);
+    }
+
+    private static bool LooksLikeCheckboxStateValueDict(PdfSharpCore.Pdf.PdfDictionary d)
+    {
+        if (!d.Elements.ContainsKey("/V")) return false;
+        var v = d.Elements["/V"]?.ToString() ?? "";
+        return v == "/Off" || v == "/Yes" || v == "/On"
+            || v.Equals("Off", System.StringComparison.OrdinalIgnoreCase)
+            || v.Equals("Yes", System.StringComparison.OrdinalIgnoreCase)
+            || v.Equals("On",  System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FindOnStateNameDict(PdfSharpCore.Pdf.PdfDictionary d)
+    {
+        if (!d.Elements.ContainsKey("/AP")) return null;
+        var ap = ResolveDict(d.Elements["/AP"]);
+        if (ap is null || !ap.Elements.ContainsKey("/N")) return null;
+        var n = ResolveDict(ap.Elements["/N"]);
+        if (n is null) return null;
+        foreach (var key in n.Elements.Keys)
+            if (key != "/Off") return key;
+        return null;
     }
 
     private static bool IsCheckedValue(string v)

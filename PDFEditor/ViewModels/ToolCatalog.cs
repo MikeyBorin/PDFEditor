@@ -13,12 +13,18 @@ public record ToolCatalogEntry(
     string? CommandName,
     string Glyph,
     string Label,
-    string Tooltip)
+    string Tooltip,
+    bool IsPlaceholder = false)
 {
     // Precomputed single string for the palette/sidebar ToolTip binding.
     // A single Binding is more reliable than a MultiBinding inside a
     // FrameworkElementFactory item template.
     public string DisplayTooltip => string.IsNullOrEmpty(Tooltip) ? Label : $"{Label} — {Tooltip}";
+
+    /// <summary>Stable identifier used by palette-customisation persistence.
+    /// Modes use their enum name; actions use their CommandName; other entries
+    /// fall back to the Label as a last resort.</summary>
+    public string Key => Mode?.ToString() ?? CommandName ?? Label;
 }
 
 public static class ToolCatalog
@@ -53,5 +59,6 @@ public static class ToolCatalog
         // --- Actions (open dialog / place content) ---
         new ToolCatalogEntry(null, "InsertImageOnCurrent", "", "Image",     "Insert an image on the current page"),
         new ToolCatalogEntry(null, "OpenSignatureLibrary", "", "Signature", "Place a signature"),
+
     };
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using PDFEditor.ViewModels;
@@ -33,6 +34,12 @@ public class ViewSettings
     /// <summary>When true, the palette and sidebar-Tools show icons only
     /// (labels hidden); tooltips still reveal the tool name on hover.</summary>
     public bool ToolsIconsOnly { get; set; }
+
+    /// <summary>Keys of ToolCatalogEntry items that should NOT appear in the
+    /// floating Tool Palette. Default (empty) = show every entry. Managed
+    /// by the "Customise Palette…" dialog. The toolbar is unaffected — the
+    /// two surfaces are curated independently.</summary>
+    public List<string> HiddenPaletteItems { get; set; } = new();
 }
 
 /// <summary>Persists user's zoom-mode preference across app runs. JSON in

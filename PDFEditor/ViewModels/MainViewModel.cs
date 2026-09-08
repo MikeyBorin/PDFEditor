@@ -284,6 +284,30 @@ public partial class MainViewModel : ObservableObject
     // same static catalog and stay in sync.
     public ToolCatalogEntry[] ToolCatalogEntries => ToolCatalog.All;
 
+    /// <summary>Palette-side filtered view: entries whose Key is NOT in
+    /// ViewSettings.HiddenPaletteItems. The palette binds ItemsSource here and
+    /// re-reads when this property fires PropertyChanged.</summary>
+    public ToolCatalogEntry[] VisiblePaletteEntries
+    {
+        get
+        {
+            var hidden = new System.Collections.Generic.HashSet<string>(
+                ViewSettings.Settings.HiddenPaletteItems, System.StringComparer.Ordinal);
+            return ToolCatalog.All.Where(e => !hidden.Contains(e.Key)).ToArray();
+        }
+    }
+
+    /// <summary>Called by the Customise Palette dialog. Rewrites the hidden
+    /// set, saves, and fires PropertyChanged on VisiblePaletteEntries so any
+    /// open palette re-renders.</summary>
+    public void SetPaletteHidden(System.Collections.Generic.IEnumerable<string> hiddenKeys)
+    {
+        var list = new System.Collections.Generic.List<string>(hiddenKeys);
+        ViewSettings.Settings.HiddenPaletteItems = list;
+        ViewSettings.Save();
+        OnPropertyChanged(nameof(VisiblePaletteEntries));
+    }
+
     // The catalog entry for the currently-active tool. Sidebar binds its
     // SelectedItem here so the active row highlights automatically, and the
     // floating palette compares against it for per-button highlighting.
@@ -1897,33 +1921,59 @@ public partial class MainViewModel : ObservableObject
         finally { IsBusy = false; }
     }
 
+    /// <summary>Toggle the AcroForm checkbox widget (if any) whose /Rect contains
+    /// the given normalized page-coord click. Returns true if a checkbox was
+    /// toggled, false if the click missed. Called from AnnotationLayer's
+    /// Select-tool empty-space click path.</summary>
+    public async Task<bool> TryToggleFormCheckboxAt(int pageIndex, double xNorm, double yNorm)
+    {
+        if (_doc.Bytes is null) return false;
+        var result = await Task.Run(() => _forms.TryToggleCheckboxAt(_doc.Bytes!, pageIndex, xNorm, yNorm));
+        if (!result.Changed) return false;
+        await ApplyBytesPreservingOverlaysAsync(result.Bytes,
+            $"Toggle checkbox {result.FieldName} → {(result.NowChecked ? "checked" : "unchecked")}");
+        StatusText = $"Checkbox {result.FieldName} → {(result.NowChecked ? "checked" : "unchecked")}.";
+        return true;
+    }
+
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private async Task CheckAllBoxes()
+    private Task CheckAllBoxes() => ApplyCheckAllBoxes(checkedState: true);
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private Task UncheckAllBoxes() => ApplyCheckAllBoxes(checkedState: false);
+
+    private async Task ApplyCheckAllBoxes(bool checkedState)
     {
         if (_doc.Bytes is null) return;
         try
         {
             IsBusy = true;
-            var result = await Task.Run(() => _forms.CheckAllBoxes(_doc.Bytes!));
+            var result = await Task.Run(() => checkedState
+                ? _forms.CheckAllBoxes(_doc.Bytes!)
+                : _forms.UncheckAllBoxes(_doc.Bytes!));
+            var verb = checkedState ? "check" : "uncheck";
+            var verbPast = checkedState ? "Checked" : "Unchecked";
+            var alreadyState = checkedState ? "checked" : "unchecked";
             if (result.TotalCheckboxes == 0)
             {
                 MessageBox.Show(
-                    "This PDF has no AcroForm checkbox fields — nothing to check.\n\n" +
+                    "This PDF has no AcroForm checkbox fields — nothing to " + verb + ".\n\n" +
                     "If the checkboxes are drawn graphics (e.g. a scanned or printed form), " +
-                    "template-match \"check all\" is not yet available. As a workaround: " +
-                    "use the Tick tool and click each box, or copy a ✓ and right-click → " +
+                    "template-match \"" + verb + " all\" is not available. As a workaround: " +
+                    "use the Tick / Cross tool and click each box, or copy a ✓ and right-click → " +
                     "Paste text at each location.",
-                    "Check All Boxes", MessageBoxButton.OK, MessageBoxImage.Information);
+                    checkedState ? "Check All Boxes" : "Uncheck All Boxes",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             if (result.Changed == 0)
             {
-                StatusText = $"All {result.TotalCheckboxes} checkbox field(s) already checked.";
+                StatusText = $"All {result.TotalCheckboxes} checkbox field(s) already {alreadyState}.";
                 return;
             }
             await ApplyBytesPreservingOverlaysAsync(result.Bytes,
-                $"Check all boxes ({result.Changed} of {result.TotalCheckboxes})");
-            StatusText = $"Checked {result.Changed} of {result.TotalCheckboxes} checkbox field(s). Save to persist.";
+                $"{verbPast} all boxes ({result.Changed} of {result.TotalCheckboxes})");
+            StatusText = $"{verbPast} {result.Changed} of {result.TotalCheckboxes} checkbox field(s). Save to persist.";
         }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Check All Boxes failed", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { IsBusy = false; }
@@ -2649,6 +2699,7 @@ public partial class MainViewModel : ObservableObject
         MakeSearchablePdfCommand.NotifyCanExecuteChanged();
         FillFormCommand.NotifyCanExecuteChanged();
         CheckAllBoxesCommand.NotifyCanExecuteChanged();
+        UncheckAllBoxesCommand.NotifyCanExecuteChanged();
         NormalizeCheckboxSizesCommand.NotifyCanExecuteChanged();
         DrawSignatureCommand.NotifyCanExecuteChanged();
         LoadSignatureImageCommand.NotifyCanExecuteChanged();

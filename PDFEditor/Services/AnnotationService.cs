@@ -43,6 +43,12 @@ public class AnnotationService
 
                     case AnnotationKind.Whiteout:
                         gfx.DrawRectangle(XBrushes.White, a.X * w, a.Y * h, a.Width * w, a.Height * h);
+                        // Form widgets (checkboxes, text fields, etc.) are drawn by the
+                        // viewer's form layer ON TOP of page content — a plain white
+                        // rectangle can't cover them. Strip any widget whose centre
+                        // falls inside this whiteout so "whiteout over a checkbox"
+                        // actually removes the checkbox.
+                        RemoveWidgetsUnderRegion(page, doc, a.X, a.Y, a.Width, a.Height);
                         break;
 
                     case AnnotationKind.Redaction:
@@ -828,6 +834,71 @@ public class AnnotationService
         typeof(PdfSharpCore.Pdf.AcroForms.PdfAcroForm).GetConstructor(
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
             null, new[] { typeof(PdfSharpCore.Pdf.PdfDocument) }, null)!;
+
+    /// <summary>Strips any /Widget annotation whose /Rect centre falls inside
+    /// the given normalized-page-coord region. Also removes the corresponding
+    /// entry from doc.AcroForm.Fields so the field truly disappears — not just
+    /// its visible widget. Called from the Whiteout flatten path so drawing a
+    /// whiteout over a form checkbox actually removes the checkbox.</summary>
+    private static void RemoveWidgetsUnderRegion(PdfSharpCore.Pdf.PdfPage page,
+                                                 PdfSharpCore.Pdf.PdfDocument doc,
+                                                 double xNorm, double yNorm,
+                                                 double wNorm, double hNorm)
+    {
+        if (!page.Elements.ContainsKey("/Annots")) return;
+        var annots = page.Elements.GetArray("/Annots");
+        if (annots == null) return;
+        var pageW = page.Width.Point;
+        var pageH = page.Height.Point;
+        // Whiteout in PDF space (bottom-left origin).
+        var xLo = xNorm * pageW;
+        var xHi = (xNorm + wNorm) * pageW;
+        var yHi = pageH - yNorm * pageH;                       // upper-right y
+        var yLo = pageH - (yNorm + hNorm) * pageH;             // lower-left  y
+
+        // Collect widget indirect refs we need to also purge from AcroForm.Fields.
+        var removed = new System.Collections.Generic.List<PdfSharpCore.Pdf.PdfItem>();
+        for (int i = annots.Elements.Count - 1; i >= 0; i--)
+        {
+            var el = annots.Elements[i];
+            var dict = ResolveDict(el);
+            if (dict == null) continue;
+            if (dict.Elements.GetName("/Subtype") != "/Widget") continue;
+            if (!dict.Elements.ContainsKey("/Rect")) continue;
+            var rect = dict.Elements.GetRectangle("/Rect");
+            var cx = (rect.X1 + rect.X2) / 2.0;
+            var cy = (rect.Y1 + rect.Y2) / 2.0;
+            if (cx >= xLo && cx <= xHi && cy >= yLo && cy <= yHi)
+            {
+                removed.Add(el);
+                annots.Elements.RemoveAt(i);
+            }
+        }
+        if (removed.Count == 0) return;
+
+        // Purge matching entries from AcroForm.Fields as well.
+        var form = doc.AcroForm;
+        if (form == null) return;
+        if (!form.Elements.ContainsKey("/Fields")) return;
+        var fields = form.Elements.GetArray("/Fields");
+        if (fields == null) return;
+        // Compare by ObjectID for indirect refs, or by reference equality
+        // for inline dicts (rare — widget fields are usually indirect).
+        var removedIds = new System.Collections.Generic.HashSet<PdfSharpCore.Pdf.PdfObjectID>();
+        foreach (var el in removed)
+        {
+            if (el is PdfSharpCore.Pdf.Advanced.PdfReference r)
+                removedIds.Add(r.ObjectID);
+        }
+        for (int i = fields.Elements.Count - 1; i >= 0; i--)
+        {
+            var el = fields.Elements[i];
+            if (el is PdfSharpCore.Pdf.Advanced.PdfReference r && removedIds.Contains(r.ObjectID))
+                fields.Elements.RemoveAt(i);
+            else if (removed.Contains(el))
+                fields.Elements.RemoveAt(i);
+        }
+    }
 
     /// <summary>Writes an interactive AcroForm checkbox onto the given page at
     /// the normalized rectangle (top-left origin, y-down). Adds the widget to

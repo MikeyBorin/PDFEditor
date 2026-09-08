@@ -120,17 +120,45 @@ public class ToolPaletteWindow : Window
 
         _items = new ItemsControl
         {
-            ItemsSource = ToolCatalog.All,
+            ItemsSource = _vm.VisiblePaletteEntries,
             ItemTemplate = BuildItemTemplate()
         };
         root.Children.Add(_items);
 
         Content = root;
+
+        // Right-click anywhere on the palette background opens the Customise
+        // Palette dialog. Right-click on a specific tool button bubbles up
+        // here too (Buttons don't consume right-click by default), so both
+        // gestures work.
+        MouseRightButtonUp += (_, e) =>
+        {
+            PaletteCustomiseDialog.Show(_vm);
+            e.Handled = true;
+        };
+
+        // React to the VM's palette-visibility changes so the ItemsSource
+        // refreshes without having to close and reopen the palette.
+        _vm.PropertyChanged += VmPropertyChanged;
+        Closed += (_, _) => _vm.PropertyChanged -= VmPropertyChanged;
+    }
+
+    private void VmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.VisiblePaletteEntries))
+        {
+            _items.ItemsSource = _vm.VisiblePaletteEntries;
+        }
     }
 
     private void EntryButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button b || b.DataContext is not ToolCatalogEntry entry) return;
+        if (entry.IsPlaceholder)
+        {
+            ShowPlaceholderRequestDialog(entry);
+            return;
+        }
         if (entry.Mode is ToolMode m)
         {
             _vm.SetToolCommand.Execute(m.ToString());
@@ -148,6 +176,20 @@ public class ToolPaletteWindow : Window
         }
     }
 
+    private static void ShowPlaceholderRequestDialog(ToolCatalogEntry entry)
+    {
+        MessageBox.Show(
+            $"“{entry.Label}” is not built yet.\n\n" +
+            "It's on the shortlist as a possible future feature. If you want it, " +
+            "email support@artimax.com.au (mention which feature and how you'd use it), " +
+            "or file a GitHub issue at:\n" +
+            "  https://github.com/MikeyBorin/PDFEditor/issues\n\n" +
+            "See the Help file (F1) → \"Requesting features\" for what's known about scope.",
+            "Feature not built yet",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
     private DataTemplate BuildItemTemplate()
     {
         // Programmatic template — a button per catalog entry, wired to
@@ -162,6 +204,11 @@ public class ToolPaletteWindow : Window
         btn.SetValue(Control.PaddingProperty, new Thickness(6, 4, 6, 4));
         btn.SetValue(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Left);
         btn.SetValue(Control.BorderThicknessProperty, new Thickness(0));
+        // Placeholder entries render at reduced opacity so they read as
+        // "future / not yet implemented" without disabling clickability
+        // (a click on a placeholder opens the how-to-request dialog).
+        btn.SetBinding(UIElement.OpacityProperty,
+            new Binding("IsPlaceholder") { Converter = new PlaceholderOpacityConverter() });
         // Click handler routes both tool modes and action entries (Image, Signature).
         btn.AddHandler(Button.ClickEvent, new RoutedEventHandler(EntryButton_Click));
         // Single-binding tooltip is more reliable than MultiBinding inside a
@@ -228,6 +275,14 @@ public class ToolPaletteWindow : Window
     {
         public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
             => value?.ToString() ?? "";
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class PlaceholderOpacityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            => value is bool b && b ? 0.5 : 1.0;
         public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
             => throw new NotSupportedException();
     }
