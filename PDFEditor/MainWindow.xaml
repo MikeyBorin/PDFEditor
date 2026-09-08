@@ -172,6 +172,7 @@
                 <MenuItem Header="_View Help" InputGestureText="F1" Click="Help_Click"/>
                 <MenuItem Header="_Check for Updates..." Command="{Binding CheckForUpdatesCommand}" ToolTip="Ask github.com if a newer release is available. No auto-check — this only runs when you click."/>
                 <Separator/>
+                <MenuItem Header="_Support the Project..." Click="Support_Click" ToolTip="Optional donation via GitHub Sponsors or Ko-fi. Opens the Help page's Support section."/>
                 <MenuItem Header="About" Click="About_Click"/>
             </MenuItem>
         </Menu>

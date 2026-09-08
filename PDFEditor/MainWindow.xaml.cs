@@ -201,7 +201,9 @@ public partial class MainWindow : Window
 
     private void Help_Click(object sender, RoutedEventArgs e) => OpenHelp();
 
-    private void OpenHelp()
+    private void Support_Click(object sender, RoutedEventArgs e) => OpenHelp("support");
+
+    private void OpenHelp(string? anchor = null)
     {
         try
         {
@@ -211,7 +213,10 @@ public partial class MainWindow : Window
                 MessageBox.Show($"Help file not found:\n{path}", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var psi = new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true };
+            var target = string.IsNullOrWhiteSpace(anchor)
+                ? path
+                : new System.Uri(path).AbsoluteUri + "#" + anchor;
+            var psi = new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true };
             System.Diagnostics.Process.Start(psi);
         }
         catch (System.Exception ex)
@@ -830,7 +835,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.33\n\n" +
+            "ArtiMax PDF Editor  v1.0.34\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +
