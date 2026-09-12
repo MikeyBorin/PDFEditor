@@ -91,6 +91,17 @@ if (Test-Path $scriptsSrc) {
     New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
     Copy-Item -Path (Join-Path $scriptsSrc "*") -Destination $scriptsDest -Recurse -Force
     Write-Host "  bundled update scripts" -ForegroundColor Green
+
+    # The launchers also go at the ZIP's TOP LEVEL, not just in scripts\.
+    # Only zips ship, so the first unpack has to be done by hand in Explorer
+    # -- and what the user needs to find at the top of that extraction is the
+    # .bat. From then on they keep it in Downloads and never unzip manually
+    # again. Portable first, since that's the zip this one belongs to.
+    foreach ($launcher in @('Extract ArtiMax PDF Editor (portable).bat', 'Install ArtiMax PDF Editor.bat')) {
+        $lp = Join-Path $scriptsSrc $launcher
+        if (Test-Path $lp) { Copy-Item $lp -Destination $Staging -Force }
+        else { Write-Warning "scripts\$launcher is missing -- it won't be at the top of the ZIP." }
+    }
 } else {
     Write-Warning "No scripts folder found -- the release will have no updater in it."
 }
@@ -192,19 +203,12 @@ if (Test-Path $issScript) {
     }
 }
 
-# --- Loose launcher .bats ---------------------------------------------------
-# Both launchers must also ship OUTSIDE any zip: each one's job is to open a
-# zip, so burying it inside the zip it opens would be circular. The user keeps
-# them in Downloads once and they work for every future release.
-foreach ($bat in @('Install ArtiMax PDF Editor.bat', 'Extract ArtiMax PDF Editor (portable).bat')) {
-    $src = Join-Path $scriptsSrc $bat
-    if (Test-Path $src) { Copy-Item $src -Destination $DistDir -Force }
-    else { Write-Warning "scripts\$bat is missing -- it won't be in this release." }
-}
-
 Write-Host ""
-Write-Host "Ship dist\$Stem.zip, dist\ArtiMaxPDFEditor-Setup-$Version.exe + .zip," -ForegroundColor DarkGray
-Write-Host "and both launcher .bat files from dist\." -ForegroundColor DarkGray
+Write-Host "Ship ZIPS ONLY:" -ForegroundColor DarkGray
+Write-Host "  dist\$Stem.zip                          (portable / update)" -ForegroundColor DarkGray
+Write-Host "  dist\ArtiMaxPDFEditor-Setup-$Version.zip  (installer)" -ForegroundColor DarkGray
+Write-Host "Each carries its own launcher .bat at the top level. The bare" -ForegroundColor DarkGray
+Write-Host "Setup .exe stays out of the release -- gateways block it." -ForegroundColor DarkGray
 
 # --- Clean up the staging folder -------------------------------------------
 # Staging is a build intermediate: the ZIP and Setup.exe both contain the
