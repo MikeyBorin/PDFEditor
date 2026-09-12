@@ -160,6 +160,30 @@ if (Test-Path $issScript) {
             if (Test-Path $setupExe) {
                 $setupMB = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
                 Write-Host "Wrote $setupExe  ($setupMB MB)" -ForegroundColor Green
+
+                # --- Zipped installer ------------------------------------
+                # Plenty of corporate gateways refuse a bare .exe download
+                # outright. This is the same Setup.exe wrapped in a zip, with
+                # the one-click extract-unblock-and-run .bat beside it, so the
+                # user never has to clear mark-of-the-web by hand.
+                $setupZip = Join-Path $DistDir "ArtiMaxPDFEditor-Setup-$Version.zip"
+                if (Test-Path $setupZip) { Remove-Item $setupZip -Force }
+
+                $zipItems   = @($setupExe)
+                $installBat = Join-Path $scriptsSrc "Install ArtiMax PDF Editor.bat"
+                if (Test-Path $installBat) {
+                    $zipItems += $installBat
+                    # Also drop it loose in dist. It has to be downloadable on
+                    # its own, because it is the thing that opens the zip --
+                    # shipping it only inside the zip would be circular.
+                    Copy-Item $installBat -Destination $DistDir -Force
+                } else {
+                    Write-Warning "scripts\Install ArtiMax PDF Editor.bat is missing -- the zipped installer will have no one-click launcher."
+                }
+
+                Compress-Archive -Path $zipItems -DestinationPath $setupZip -CompressionLevel Optimal
+                $setupZipMB = [math]::Round((Get-Item $setupZip).Length / 1MB, 1)
+                Write-Host "Wrote $setupZip  ($setupZipMB MB)" -ForegroundColor Green
             }
         }
     } else {
@@ -168,8 +192,19 @@ if (Test-Path $issScript) {
     }
 }
 
+# --- Loose launcher .bats ---------------------------------------------------
+# Both launchers must also ship OUTSIDE any zip: each one's job is to open a
+# zip, so burying it inside the zip it opens would be circular. The user keeps
+# them in Downloads once and they work for every future release.
+foreach ($bat in @('Install ArtiMax PDF Editor.bat', 'Extract ArtiMax PDF Editor (portable).bat')) {
+    $src = Join-Path $scriptsSrc $bat
+    if (Test-Path $src) { Copy-Item $src -Destination $DistDir -Force }
+    else { Write-Warning "scripts\$bat is missing -- it won't be in this release." }
+}
+
 Write-Host ""
-Write-Host "Ship dist\$Stem.zip and (if built) dist\ArtiMaxPDFEditor-Setup-$Version.exe." -ForegroundColor DarkGray
+Write-Host "Ship dist\$Stem.zip, dist\ArtiMaxPDFEditor-Setup-$Version.exe + .zip," -ForegroundColor DarkGray
+Write-Host "and both launcher .bat files from dist\." -ForegroundColor DarkGray
 
 # --- Clean up the staging folder -------------------------------------------
 # Staging is a build intermediate: the ZIP and Setup.exe both contain the
