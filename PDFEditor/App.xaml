@@ -32,8 +32,8 @@
             <SolidColorBrush x:Key="AccentHover" Color="#6BA0FF" />
             <SolidColorBrush x:Key="InputBg" Color="#1A1B1E" />
             <SolidColorBrush x:Key="InputFg" Color="#E6E6E6" />
-            <SolidColorBrush x:Key="Hover" Color="#3A3C42" />
-            <SolidColorBrush x:Key="Pressed" Color="#4A4C52" />
+            <SolidColorBrush x:Key="Hover" Color="#666C78" />
+            <SolidColorBrush x:Key="Pressed" Color="#7D8593" />
             <SolidColorBrush x:Key="Selection" Color="#4C8BF5" />
             <SolidColorBrush x:Key="SelectionText" Color="#FFFFFF" />
             <SolidColorBrush x:Key="MenuPopupBg" Color="#24262A" />
@@ -134,7 +134,7 @@
                                         </Border>
                                         <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" IsOpen="{TemplateBinding IsSubmenuOpen}" Focusable="False" PopupAnimation="Fade">
                                             <Border Background="{DynamicResource MenuPopupBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1" Padding="2">
-                                                <ScrollViewer CanContentScroll="True" Style="{x:Null}">
+                                                <ScrollViewer CanContentScroll="True" Style="{x:Null}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                                 </ScrollViewer>
                                             </Border>
@@ -172,7 +172,7 @@
                                         </Border>
                                         <Popup x:Name="PART_Popup" Placement="Right" AllowsTransparency="True" IsOpen="{TemplateBinding IsSubmenuOpen}" Focusable="False" PopupAnimation="Fade">
                                             <Border Background="{DynamicResource MenuPopupBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1" Padding="2">
-                                                <ScrollViewer CanContentScroll="True" Style="{x:Null}">
+                                                <ScrollViewer CanContentScroll="True" Style="{x:Null}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                                 </ScrollViewer>
                                             </Border>

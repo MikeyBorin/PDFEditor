@@ -67,8 +67,8 @@ public class ThemeService
         ("InputBg",        Color.FromRgb(0x1A, 0x1B, 0x1E)),
         ("InputFg",        Color.FromRgb(0xE6, 0xE6, 0xE6)),
         // Hover / pressed / selection states — always distinct from Panel and safe with Text.
-        ("Hover",          Color.FromRgb(0x3A, 0x3C, 0x42)),
-        ("Pressed",        Color.FromRgb(0x4A, 0x4C, 0x52)),
+        ("Hover",          Color.FromRgb(0x66, 0x6C, 0x78)),
+        ("Pressed",        Color.FromRgb(0x7D, 0x85, 0x93)),
         ("Selection",      Color.FromRgb(0x4C, 0x8B, 0xF5)),
         ("SelectionText",  Color.FromRgb(0xFF, 0xFF, 0xFF)),
         // Menu popup surface (used by MenuItem custom template).
@@ -88,8 +88,8 @@ public class ThemeService
         ("AccentHover",    Color.FromRgb(0x3B, 0x83, 0xF0)),
         ("InputBg",        Color.FromRgb(0xFF, 0xFF, 0xFF)),
         ("InputFg",        Color.FromRgb(0x14, 0x16, 0x1A)),
-        ("Hover",          Color.FromRgb(0xD6, 0xDD, 0xEB)),
-        ("Pressed",        Color.FromRgb(0xB8, 0xC5, 0xDF)),
+        ("Hover",          Color.FromRgb(0xB9, 0xC3, 0xD4)),
+        ("Pressed",        Color.FromRgb(0x9C, 0xA9, 0xC0)),
         ("Selection",      Color.FromRgb(0x1E, 0x66, 0xD5)),
         ("SelectionText",  Color.FromRgb(0xFF, 0xFF, 0xFF)),
         ("MenuPopupBg",    Color.FromRgb(0xFF, 0xFF, 0xFF)),

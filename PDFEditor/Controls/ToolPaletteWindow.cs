@@ -99,6 +99,7 @@ public class ToolPaletteWindow : Window
         // (black), and a style setter beats the value inherited from the window --
         // so without this the caret glyph is black-on-dark in the dark theme.
         try { swatchButton.SetResourceReference(ForegroundProperty, "Text"); } catch { }
+        swatchButton.Template = BuildFlatButtonTemplate();
         var swatchRow = new StackPanel { Orientation = Orientation.Horizontal };
         var swatchCell = new System.Windows.Shapes.Rectangle
         {
@@ -194,6 +195,43 @@ public class ToolPaletteWindow : Window
             MessageBoxImage.Information);
     }
 
+    /// <summary>Flat button template matching the toolbar's ToolButton style:
+    /// a Border honouring the button's own Background (so the active-tool Accent
+    /// highlight still shows), with hover and pressed pulled from the Hover and
+    /// Pressed theme brushes. Built in code because this window has no XAML.</summary>
+    private static ControlTemplate BuildFlatButtonTemplate()
+    {
+        var tpl = new ControlTemplate(typeof(Button));
+
+        var border = new FrameworkElementFactory(typeof(Border), "Bd");
+        border.SetBinding(Border.BackgroundProperty,
+            new Binding("Background") { RelativeSource = RelativeSource.TemplatedParent });
+        border.SetBinding(Border.PaddingProperty,
+            new Binding("Padding") { RelativeSource = RelativeSource.TemplatedParent });
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+
+        var content = new FrameworkElementFactory(typeof(ContentPresenter));
+        content.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+        content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        border.AppendChild(content);
+
+        tpl.VisualTree = border;
+
+        var over = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+        over.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension("Hover"), "Bd"));
+        tpl.Triggers.Add(over);
+
+        var pressed = new Trigger
+        {
+            Property = System.Windows.Controls.Primitives.ButtonBase.IsPressedProperty,
+            Value = true
+        };
+        pressed.Setters.Add(new Setter(Border.BackgroundProperty, new DynamicResourceExtension("Pressed"), "Bd"));
+        tpl.Triggers.Add(pressed);
+
+        return tpl;
+    }
+
     private DataTemplate BuildItemTemplate()
     {
         // Programmatic template — a button per catalog entry, wired to
@@ -214,6 +252,11 @@ public class ToolPaletteWindow : Window
         // Pointing the Button at the theme brush fixes glyph and label in one go,
         // and keeps following the theme when it is switched at runtime.
         btn.SetResourceReference(Control.ForegroundProperty, "Text");
+        // Plain Buttons keep the default Aero template, whose IsMouseOver trigger
+        // paints a pale system blue -- unreadable under white theme text in the
+        // dark theme. Use the same flat template the toolbar buttons use so hover
+        // and pressed come from the Hover / Pressed theme brushes instead.
+        btn.SetValue(Control.TemplateProperty, BuildFlatButtonTemplate());
         // Placeholder entries render at reduced opacity so they read as
         // "future / not yet implemented" without disabling clickability
         // (a click on a placeholder opens the how-to-request dialog).
