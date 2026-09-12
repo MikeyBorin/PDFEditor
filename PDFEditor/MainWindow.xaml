@@ -214,6 +214,9 @@
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Select" Command="{Binding SetToolCommand}" CommandParameter="Select" ToolTip="Select / Move">
                         <StackPanel><TextBlock Text="&#xE8B0;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Select" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>
+                    <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Pan" Command="{Binding SetToolCommand}" CommandParameter="Pan" ToolTip="Pan — grab the page and drag to scroll">
+                        <StackPanel><TextBlock Text="&#xE7C2;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Pan" Style="{StaticResource ToolLabel}"/></StackPanel>
+                    </Button>
                     <Button Style="{StaticResource ToolToggleButton}" x:Name="TB_Highlight" Command="{Binding SetToolCommand}" CommandParameter="Highlight" ToolTip="Highlight">
                         <StackPanel><TextBlock Text="&#xE7E6;" Style="{StaticResource ToolGlyph}"/><TextBlock Text="Highlight" Style="{StaticResource ToolLabel}"/></StackPanel>
                     </Button>

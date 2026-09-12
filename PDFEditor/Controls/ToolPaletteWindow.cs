@@ -95,6 +95,10 @@ public class ToolPaletteWindow : Window
             Background = Brushes.Transparent,
             ToolTip = "Annotation colour — click to change"
         };
+        // Button default style pins Foreground to the system control-text brush
+        // (black), and a style setter beats the value inherited from the window --
+        // so without this the caret glyph is black-on-dark in the dark theme.
+        try { swatchButton.SetResourceReference(ForegroundProperty, "Text"); } catch { }
         var swatchRow = new StackPanel { Orientation = Orientation.Horizontal };
         var swatchCell = new System.Windows.Shapes.Rectangle
         {
@@ -204,6 +208,12 @@ public class ToolPaletteWindow : Window
         btn.SetValue(Control.PaddingProperty, new Thickness(6, 4, 6, 4));
         btn.SetValue(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Left);
         btn.SetValue(Control.BorderThicknessProperty, new Thickness(0));
+        // Same trap as the swatch button, and the reason palette glyphs and labels
+        // came out black in the dark theme: the tool rows are a Button template, so
+        // the TextBlocks inside inherit the Button's Foreground, not the window's.
+        // Pointing the Button at the theme brush fixes glyph and label in one go,
+        // and keeps following the theme when it is switched at runtime.
+        btn.SetResourceReference(Control.ForegroundProperty, "Text");
         // Placeholder entries render at reduced opacity so they read as
         // "future / not yet implemented" without disabling clickability
         // (a click on a placeholder opens the how-to-request dialog).

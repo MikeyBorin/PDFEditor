@@ -38,6 +38,7 @@ public static class ToolCatalog
     {
         // --- Tool modes (set the active drawing/select tool) ---
         new ToolCatalogEntry(ToolMode.Select,          null, "", "Select",       "Select / move existing annotations"),
+        new ToolCatalogEntry(ToolMode.Pan,             null, "\uE7C2", "Pan",          "Grab the page and drag to scroll up and down"),
         new ToolCatalogEntry(ToolMode.Highlight,       null, "", "Highlight",    "Highlight text"),
         new ToolCatalogEntry(ToolMode.StickyNote,      null, "", "Note",         "Sticky note"),
         new ToolCatalogEntry(ToolMode.TextStamp,       null, "", "Text",         "Text stamp"),

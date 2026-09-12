@@ -1572,9 +1572,12 @@ public partial class MainViewModel : ObservableObject
         if (Enum.TryParse<ToolMode>(tool, out var t))
         {
             CurrentTool = t;
-            StatusText = t == ToolMode.Select
-                ? "Select tool — click a page to select; use other tools to annotate."
-                : $"{t} tool — click and drag on the page.";
+            StatusText = t switch
+            {
+                ToolMode.Select => "Select tool — click a page to select; use other tools to annotate.",
+                ToolMode.Pan    => "Pan tool — drag a page to scroll the view up and down.",
+                _               => $"{t} tool — click and drag on the page.",
+            };
         }
     }
 

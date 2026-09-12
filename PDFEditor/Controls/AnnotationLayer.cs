@@ -58,6 +58,13 @@ public class AnnotationLayer : Canvas
     private string? _resizingHandle;   // "E", "S", or "SE"
     private double _resizeAnchorRight, _resizeAnchorBottom;
 
+    // Pan (hand tool) state. Panning scrolls the ancestor ScrollViewer
+    // instead of touching the page, so it works at any zoom, leaves the
+    // document untouched and pushes nothing onto either undo stack.
+    private ScrollViewer? _panScroller;
+    private Point _panStart;               // grab point, in scroller coords
+    private double _panStartH, _panStartV; // scroll offsets at grab time
+
     // Sticky checkbox size — shared across all AnnotationLayer instances so
     // moving to a different page keeps the template dimensions. Set by the
     // first real checkbox drag; used to auto-size subsequent clicks so a run
@@ -312,12 +319,27 @@ public class AnnotationLayer : Canvas
         MainVM.LastHover = (Page.PageIndex, System.Math.Clamp(p.X / w, 0, 1), System.Math.Clamp(p.Y / h, 0, 1));
     }
 
+    /// <summary>Walks up the visual tree to the ScrollViewer that scrolls the
+    /// page list. Pan deltas are measured in its coordinates rather than the
+    /// layer's, so the Viewbox zoom scale does not distort the drag.</summary>
+    private ScrollViewer? FindScroller()
+    {
+        DependencyObject? d = this;
+        while (d != null)
+        {
+            if (d is ScrollViewer sv) return sv;
+            d = VisualTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+
     private void UpdateCursor()
     {
         if (MainVM is null) { Cursor = Cursors.Arrow; return; }
         Cursor = MainVM.CurrentTool switch
         {
             ToolMode.Select => Cursors.Arrow,
+            ToolMode.Pan => Cursors.Hand,
             ToolMode.Ink => Cursors.Pen,
             ToolMode.Erase => Cursors.No,
             _ => Cursors.Cross
@@ -744,6 +766,23 @@ public class AnnotationLayer : Canvas
         // Any click clears the transient search-hit highlight.
         if (MainVM.TransientHighlight != null) MainVM.TransientHighlight = null;
 
+        // Hand tool: grab the view and scroll it. Handled before every other
+        // branch so a pan drag never selects, edits or draws anything.
+        if (MainVM.CurrentTool == ToolMode.Pan)
+        {
+            _panScroller = FindScroller();
+            if (_panScroller != null)
+            {
+                _panStart  = e.GetPosition(_panScroller);
+                _panStartH = _panScroller.HorizontalOffset;
+                _panStartV = _panScroller.VerticalOffset;
+                Cursor = Cursors.ScrollAll;
+                CaptureMouse();
+            }
+            e.Handled = true;
+            return;
+        }
+
         // Double-click on an existing text/note annotation opens its editor,
         // regardless of current tool. Skip the create/select paths.
         if (e.ClickCount >= 2)
@@ -1010,6 +1049,17 @@ public class AnnotationLayer : Canvas
     {
         if (Page is null) return;
 
+        // Pan in progress: translate the drag into scroll offsets. Measured in
+        // the scroller's own coordinates so the Viewbox zoom scale does not
+        // distort the movement.
+        if (_panScroller != null)
+        {
+            var pp = e.GetPosition(_panScroller);
+            _panScroller.ScrollToHorizontalOffset(_panStartH - (pp.X - _panStart.X));
+            _panScroller.ScrollToVerticalOffset(_panStartV - (pp.Y - _panStart.Y));
+            return;
+        }
+
         if (_resizingAnnotation != null && _resizingHandle != null)
         {
             var pw = Page.PixelWidth > 0 ? Page.PixelWidth : ActualWidth;
@@ -1120,6 +1170,12 @@ public class AnnotationLayer : Canvas
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         ReleaseMouseCapture();
+        if (_panScroller != null)
+        {
+            _panScroller = null;
+            UpdateCursor();
+            return;
+        }
         if (_resizingAnnotation != null)
         {
             _resizingAnnotation = null;

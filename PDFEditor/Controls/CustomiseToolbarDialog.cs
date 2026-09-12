@@ -16,6 +16,7 @@ public static class CustomiseToolbarDialog
         ("EditInWord",   "Edit in Word"),
         ("Undo",         "Undo"),
         ("Select",       "Select"),
+        ("Pan",          "Pan (hand tool)"),
         ("Highlight",    "Highlight"),
         ("StickyNote",   "Note"),
         ("TextGroup",    "Text tools (Text · Tickmark · Crossmark · Bullet)"),

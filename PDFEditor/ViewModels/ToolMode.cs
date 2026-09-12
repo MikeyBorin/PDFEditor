@@ -3,6 +3,9 @@ namespace PDFEditor.ViewModels;
 public enum ToolMode
 {
     Select,
+    /// <summary>Hand tool: grab the page and drag to scroll the view.
+    /// Navigation only -- creates no annotation and pushes no undo.</summary>
+    Pan,
     Highlight,
     StickyNote,
     Ink,

@@ -33,6 +33,48 @@ Produces a portable, self-contained ZIP (~80 MB) with `PDFEditor.exe`,
 target machine. Pass `-TessdataPath <folder>` to bundle Tesseract training
 data for OCR support.
 
+## Updating an existing install
+
+Re-running `Setup.exe` works, but it walks the whole install wizard as if it
+were a first-time install. For an already-installed copy there's a lighter path
+that needs no admin rights and asks nothing:
+
+1. Download `ArtiMaxPDFEditor-<version>-win-x64.zip` from the
+   [latest release](https://github.com/MikeyBorin/PDFEditor/releases/latest)
+   — the ZIP asset, not the Setup.
+2. Double-click **`Update ArtiMax PDF Editor.bat`**, kept in the same folder as
+   the download (normally `Downloads`).
+
+It finds the newest `ArtiMaxPDFEditor-*.zip` beside it, checks the version is
+actually newer, closes the editor, backs the current install up, overlays the
+new files, and starts the app again.
+
+The `.bat` is only a launcher — the real work is
+`scripts\update-from-downloads.ps1` **inside the installed app**, so fixes to
+the update process arrive with the next release and the `.bat` never needs
+replacing. Grab it once out of any release ZIP's `scripts\` folder and leave it
+in `Downloads`.
+
+Settings, signatures and the toolbar layout live in
+`%APPDATA%\ArtiMaxPDFEditor\`, outside the install folder, so an update cannot
+disturb them. Extra OCR languages dropped into `tessdata\` survive too — the
+copy is an overlay, not a replace.
+
+Useful switches (run the `.ps1` directly):
+
+```
+-WhatIf        list what would change, write nothing
+-Zip <path>    use a specific ZIP instead of searching Downloads
+-Force         skip the confirm prompt; allow same/older version
+-NoBackup      skip the ~200 MB backup copy
+-NoLaunch      don't start the app afterwards
+```
+
+Setup.exe is still the tool for a **first** install — it creates the shortcuts,
+the Add/Remove Programs entry and the optional `.pdf` association. A
+per-machine install (into `Program Files`) needs the `.bat` run as
+administrator; the per-user default does not.
+
 ## What it does
 
 ### Viewing

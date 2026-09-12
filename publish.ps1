@@ -80,6 +80,21 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXIT
 Copy-Item -Path (Join-Path $RepoRoot "LICENSE")   -Destination $Staging -Force
 Copy-Item -Path (Join-Path $RepoRoot "README.md") -Destination $Staging -Force
 
+# --- Update scripts ---------------------------------------------------------
+# Shipped INSIDE the payload so the updater travels with the app: the .bat the
+# user keeps in Downloads only calls the copy under the install folder, which
+# means a fix to the update process arrives with the next release rather than
+# needing a separate hand-off.
+$scriptsSrc = Join-Path $RepoRoot "scripts"
+if (Test-Path $scriptsSrc) {
+    $scriptsDest = Join-Path $Staging "scripts"
+    New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
+    Copy-Item -Path (Join-Path $scriptsSrc "*") -Destination $scriptsDest -Recurse -Force
+    Write-Host "  bundled update scripts" -ForegroundColor Green
+} else {
+    Write-Warning "No scripts folder found -- the release will have no updater in it."
+}
+
 # --- tessdata (OCR training data) -- optional -------------------------------
 $search = @()
 if ($TessdataPath) { $search += $TessdataPath }
@@ -125,6 +140,8 @@ if (Test-Path $issScript) {
         "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 5\ISCC.exe"
     )) { if ($p -and (Test-Path $p)) { $iscc = $p; break } }
     if (-not $iscc) {
