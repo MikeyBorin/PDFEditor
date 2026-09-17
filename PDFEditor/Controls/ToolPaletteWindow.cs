@@ -35,8 +35,10 @@ public class ToolPaletteWindow : Window
         Left = Math.Max(0, owner.Left + owner.Width - 220);
         Top = Math.Max(0, owner.Top + 120);
         ResizeMode = ResizeMode.NoResize;
-        // Pick up the app theme via DynamicResource.
-        try { SetResourceReference(BackgroundProperty, "Panel"); } catch { }
+        // Pick up the app theme via DynamicResource. PaletteBg is a dedicated
+        // key: in Dark mode it's lighter than Panel so the icon glyphs read
+        // clearly against the palette surface.
+        try { SetResourceReference(BackgroundProperty, "PaletteBg"); } catch { }
         try { SetResourceReference(ForegroundProperty, "Text"); } catch { }
 
         // Owner relationship keeps the palette above PDF Editor content

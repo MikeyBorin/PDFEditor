@@ -222,64 +222,72 @@ public partial class MainWindow : Window
 
     private void Support_Click(object sender, RoutedEventArgs e)
     {
-        var body = new StackPanel { Margin = new Thickness(20) };
+        var toolBtnStyle = Application.Current?.TryFindResource("ToolButton") as Style;
 
-        body.Children.Add(new TextBlock
+        var body = new StackPanel { Margin = new Thickness(24) };
+
+        var title = new TextBlock
         {
             Text = "Support ArtiMax PDF Editor",
             FontSize = 16,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 10)
-        });
+        };
+        title.SetResourceReference(TextBlock.ForegroundProperty, "Text");
+        body.Children.Add(title);
 
-        body.Children.Add(new TextBlock
+        var msg = new TextBlock
         {
             Text = "The app is free for non-commercial use. If it has saved you time, "
                  + "a small donation helps keep it maintained. Donations are entirely "
                  + "optional and don't unlock anything.",
             TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 380,
-            Margin = new Thickness(0, 0, 0, 16)
-        });
+            MaxWidth = 400,
+            Margin = new Thickness(0, 0, 0, 18)
+        };
+        msg.SetResourceReference(TextBlock.ForegroundProperty, "TextMuted");
+        body.Children.Add(msg);
 
-        var buttons = new StackPanel
+        Button MakeLinkButton(string label, string url)
+        {
+            var b = new Button
+            {
+                Content = label,
+                Padding = new Thickness(20, 8, 20, 8),
+                MinWidth = 160,
+                Cursor = Cursors.Hand,
+                Style = toolBtnStyle,
+                BorderThickness = new Thickness(1),
+                ToolTip = url
+            };
+            b.SetResourceReference(Control.BorderBrushProperty, "Accent");
+            b.Click += (_, _) => OpenUrl(url);
+            return b;
+        }
+
+        var buttonsRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 0, 0, 14)
         };
-
-        var ghBtn = new Button
-        {
-            Content = "GitHub Sponsors",
-            Padding = new Thickness(14, 6, 14, 6),
-            Margin = new Thickness(0, 0, 8, 0),
-            MinWidth = 150,
-            ToolTip = "https://github.com/sponsors/MikeyBorin"
-        };
-        ghBtn.Click += (_, _) => OpenUrl("https://github.com/sponsors/MikeyBorin");
-        buttons.Children.Add(ghBtn);
-
-        var kofiBtn = new Button
-        {
-            Content = "Ko-fi",
-            Padding = new Thickness(14, 6, 14, 6),
-            MinWidth = 150,
-            ToolTip = "https://ko-fi.com/mikeyborin"
-        };
-        kofiBtn.Click += (_, _) => OpenUrl("https://ko-fi.com/mikeyborin");
-        buttons.Children.Add(kofiBtn);
-
-        body.Children.Add(buttons);
+        var ghBtn = MakeLinkButton("GitHub Sponsors", "https://github.com/sponsors/MikeyBorin");
+        ghBtn.Margin = new Thickness(0, 0, 8, 0);
+        var kofiBtn = MakeLinkButton("Ko-fi", "https://ko-fi.com/mikeyborin");
+        buttonsRow.Children.Add(ghBtn);
+        buttonsRow.Children.Add(kofiBtn);
+        body.Children.Add(buttonsRow);
 
         var closeBtn = new Button
         {
             Content = "Close",
             Padding = new Thickness(14, 4, 14, 4),
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
+            Margin = new Thickness(0, 6, 0, 0),
             MinWidth = 80,
-            IsCancel = true
+            IsCancel = true,
+            Style = toolBtnStyle,
+            Cursor = Cursors.Hand
         };
         body.Children.Add(closeBtn);
 
@@ -291,10 +299,10 @@ public partial class MainWindow : Window
             SizeToContent = SizeToContent.WidthAndHeight,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
-            Content = body,
-            Background = TryFindResource("Panel") as Brush ?? SystemColors.WindowBrush,
-            Foreground = TryFindResource("TextBase") as Brush ?? SystemColors.ControlTextBrush
+            Content = body
         };
+        dlg.SetResourceReference(BackgroundProperty, "PaletteBg");
+        dlg.SetResourceReference(ForegroundProperty, "Text");
         closeBtn.Click += (_, _) => dlg.Close();
         dlg.ShowDialog();
     }
@@ -921,7 +929,7 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "ArtiMax PDF Editor  v1.0.36\n\n" +
+            "ArtiMax PDF Editor  v1.0.38\n\n" +
             "Desktop PDF editor by ArtiMax. Free for personal / non-commercial use\n" +
             "under the PolyForm Noncommercial License 1.0.0. Commercial use requires\n" +
             "a separate written licence — email support@artimax.com.au.\n\n" +

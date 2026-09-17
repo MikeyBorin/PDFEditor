@@ -59,6 +59,10 @@ public class ThemeService
         ("Bg",             Color.FromRgb(0x1E, 0x1F, 0x22)),
         ("Panel",          Color.FromRgb(0x2B, 0x2D, 0x31)),
         ("PanelAlt",       Color.FromRgb(0x23, 0x24, 0x28)),
+        // PaletteBg is deliberately lighter than Panel in Dark mode so the
+        // floating Tool Palette's icon glyphs (some are thin MDL2 strokes)
+        // gain contrast against the surface. In Light mode it matches Panel.
+        ("PaletteBg",      Color.FromRgb(0x48, 0x4B, 0x52)),
         ("Border",         Color.FromRgb(0x3B, 0x3D, 0x42)),
         ("Text",           Color.FromRgb(0xE6, 0xE6, 0xE6)),
         ("TextMuted",      Color.FromRgb(0x9A, 0xA0, 0xA6)),
@@ -81,6 +85,7 @@ public class ThemeService
         ("Bg",             Color.FromRgb(0xF5, 0xF6, 0xF8)),
         ("Panel",          Color.FromRgb(0xE8, 0xEA, 0xEE)),
         ("PanelAlt",       Color.FromRgb(0xFA, 0xFB, 0xFC)),
+        ("PaletteBg",      Color.FromRgb(0xE8, 0xEA, 0xEE)),
         ("Border",         Color.FromRgb(0xC5, 0xC8, 0xCE)),
         ("Text",           Color.FromRgb(0x14, 0x16, 0x1A)),
         ("TextMuted",      Color.FromRgb(0x55, 0x5A, 0x63)),
