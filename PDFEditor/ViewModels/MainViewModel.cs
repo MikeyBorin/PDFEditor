@@ -270,6 +270,18 @@ public partial class MainViewModel : ObservableObject
         ViewSettings.Save();
     }
 
+    // Auto-Copy on Select Text: when true, HandleRegionSelection pre-copies
+    // the extracted text to the clipboard before showing the Copy/Replace/
+    // Translate prompt, so the user can dismiss the prompt if all they wanted
+    // was Copy. Toggled by the prompt's "Auto-copy" checkbox or Tools →
+    // Auto-Copy Selected Text.
+    [ObservableProperty] private bool autoCopyRegionText;
+    partial void OnAutoCopyRegionTextChanged(bool value)
+    {
+        ViewSettings.Settings.AutoCopyRegionText = value;
+        ViewSettings.Save();
+    }
+
     [RelayCommand]
     private void SetLeftPanelMode(string mode)
     {
@@ -501,6 +513,7 @@ public partial class MainViewModel : ObservableObject
         // Tool-surface preferences (mode + icons-only).
         leftPanelMode = ViewSettings.Settings.LeftPanelMode;
         toolsIconsOnly = ViewSettings.Settings.ToolsIconsOnly;
+        autoCopyRegionText = ViewSettings.Settings.AutoCopyRegionText;
         RefreshOcrLanguages();
     }
 
@@ -1439,12 +1452,44 @@ public partial class MainViewModel : ObservableObject
                 return;
             }
             StatusText = "Detected: " + region.DebugInfo;
-            var choice = Controls.RegionActionDialog.ShowTextActions(region.Text);
-            switch (choice)
+
+            // Optional pre-copy: put the extracted text on the clipboard as
+            // soon as the region is selected, so the user can dismiss the
+            // prompt (Esc / Cancel) if all they wanted was Copy — Replace and
+            // Translate stay one click away. Toggled by the "Auto-copy to
+            // clipboard" checkbox in the prompt, or Tools → Auto-Copy Selected
+            // Text.
+            var preCopied = false;
+            if (ViewSettings.Settings.AutoCopyRegionText)
+            {
+                try
+                {
+                    Controls.ClipboardHelper.SetText(region.Text);
+                    preCopied = true;
+                    StatusText = "Text copied to clipboard — pick another action or close.";
+                    Controls.ClipboardToast.ShowText(region.Text);
+                }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "Clipboard failed"); }
+            }
+
+            var dlg = Controls.RegionActionDialog.ShowTextActions(region.Text, ViewSettings.Settings.AutoCopyRegionText);
+            if (dlg.AlwaysCopy != ViewSettings.Settings.AutoCopyRegionText)
+            {
+                AutoCopyRegionText = dlg.AlwaysCopy;
+            }
+            switch (dlg.Choice)
             {
                 case Controls.RegionAction.Copy:
-                    try { Controls.ClipboardHelper.SetText(region.Text); StatusText = "Text copied to clipboard."; }
-                    catch (Exception ex) { MessageBox.Show(ex.Message, "Clipboard failed"); }
+                    if (!preCopied)
+                    {
+                        try
+                        {
+                            Controls.ClipboardHelper.SetText(region.Text);
+                            StatusText = "Text copied to clipboard.";
+                            Controls.ClipboardToast.ShowText(region.Text);
+                        }
+                        catch (Exception ex) { MessageBox.Show(ex.Message, "Clipboard failed"); }
+                    }
                     break;
                 case Controls.RegionAction.Replace:
                     ReplaceRegionWithText(pageIndex, nx, ny, nw, nh, region);

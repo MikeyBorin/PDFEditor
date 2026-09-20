@@ -128,6 +128,8 @@
                     <MenuItem Header="Sanitize Metadata" Command="{Binding SanitizeMetadataCommand}"/>
                 </MenuItem>
                 <Separator/>
+                <MenuItem Header="_Auto-Copy Selected Text" IsCheckable="True" IsChecked="{Binding AutoCopyRegionText}"
+                          ToolTip="When ticked, the Select Text tool copies the extracted text to the clipboard as soon as it's selected. The Copy / Replace / Translate prompt still appears so you can pick another action."/>
                 <MenuItem Header="Clear _Annotations..." Command="{Binding ClearAnnotationsCommand}" ToolTip="Remove unsaved overlay annotations on the current page or all pages; Ctrl+Z restores"/>
             </MenuItem>
             <MenuItem Header="_View">

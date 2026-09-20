@@ -5,9 +5,11 @@ namespace PDFEditor.Controls;
 
 public enum RegionAction { None, Copy, Replace, Save, Translate }
 
+public record RegionActionResult(RegionAction Choice, bool AlwaysCopy);
+
 public static class RegionActionDialog
 {
-    public static RegionAction ShowTextActions(string previewText)
+    public static RegionActionResult ShowTextActions(string previewText, bool initialAlwaysCopy)
     {
         return Show(
             title: "Selected text",
@@ -18,7 +20,9 @@ public static class RegionActionDialog
                 ("Replace...", RegionAction.Replace),
                 ("Translate...", RegionAction.Translate),
             },
-            isImage: false);
+            isImage: false,
+            showAlwaysCopy: true,
+            initialAlwaysCopy: initialAlwaysCopy);
     }
 
     public static RegionAction ShowImageActions()
@@ -27,10 +31,13 @@ public static class RegionActionDialog
             title: "Selected region",
             preview: "Image region captured. Copy to clipboard or save as PNG?",
             options: new[] { ("Copy", RegionAction.Copy), ("Save PNG...", RegionAction.Save) },
-            isImage: true);
+            isImage: true,
+            showAlwaysCopy: false,
+            initialAlwaysCopy: false).Choice;
     }
 
-    private static RegionAction Show(string title, string preview, (string, RegionAction)[] options, bool isImage)
+    private static RegionActionResult Show(string title, string preview, (string, RegionAction)[] options, bool isImage,
+                                           bool showAlwaysCopy, bool initialAlwaysCopy)
     {
         var w = new Window
         {
@@ -62,6 +69,19 @@ public static class RegionActionDialog
             root.Children.Add(new TextBlock { Text = preview, TextWrapping = TextWrapping.Wrap });
         }
 
+        CheckBox? alwaysCopyBox = null;
+        if (showAlwaysCopy)
+        {
+            alwaysCopyBox = new CheckBox
+            {
+                Content = "Auto-copy to clipboard when text is selected",
+                ToolTip = "When ticked, the text is copied to the clipboard as soon as it's selected — the Copy button below becomes optional. Toggle also from Tools → Auto-Copy Selected Text.",
+                IsChecked = initialAlwaysCopy,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+            root.Children.Add(alwaysCopyBox);
+        }
+
         var btns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
         RegionAction result = RegionAction.None;
         foreach (var (label, act) in options)
@@ -75,6 +95,8 @@ public static class RegionActionDialog
         root.Children.Add(btns);
 
         w.Content = root;
-        return w.ShowDialog() == true ? result : RegionAction.None;
+        var ok = w.ShowDialog() == true;
+        var alwaysCopy = alwaysCopyBox?.IsChecked == true;
+        return new RegionActionResult(ok ? result : RegionAction.None, alwaysCopy);
     }
 }

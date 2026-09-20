@@ -17,9 +17,9 @@
     <AssemblyTitle>ArtiMax PDF Editor</AssemblyTitle>
     <Company>ArtiMax</Company>
     <Copyright>Copyright (c) 2026 Michael Borin (ArtiMax). PolyForm Noncommercial License 1.0.0 — commercial use requires a separate licence.</Copyright>
-    <Version>1.0.38</Version>
-    <FileVersion>1.0.38.0</FileVersion>
-    <InformationalVersion>1.0.38</InformationalVersion>
+    <Version>1.0.40</Version>
+    <FileVersion>1.0.40.0</FileVersion>
+    <InformationalVersion>1.0.40</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

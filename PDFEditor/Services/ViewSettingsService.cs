@@ -40,6 +40,13 @@ public class ViewSettings
     /// by the "Customise Palette…" dialog. The toolbar is unaffected — the
     /// two surfaces are curated independently.</summary>
     public List<string> HiddenPaletteItems { get; set; } = new();
+
+    /// <summary>When true, the Select Text tool pre-copies the extracted text
+    /// to the clipboard as soon as the region is selected. The Copy/Replace/
+    /// Translate prompt still appears so the user can pick another action.
+    /// Toggled from the prompt's "Auto-copy" checkbox or Tools → Auto-Copy
+    /// Selected Text.</summary>
+    public bool AutoCopyRegionText { get; set; }
 }
 
 /// <summary>Persists user's zoom-mode preference across app runs. JSON in
