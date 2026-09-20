@@ -30,7 +30,7 @@ Skipping the About string drift-corrupts what users see and makes it hard to tel
 ## Distribution model
 
 Two channels:
-- **ArtiMax website** — primary. Michael manually uploads `dist/ArtiMaxPDFEditor-Setup-<ver>.exe` after each packup. Users download from there.
+- **ArtiMax website** — primary. Michael manually uploads `dist/ArtiMaxPDFEditor-Setup-<ver>.zip` (NOT the bare `.exe`) after each packup — gateways block direct `.exe` downloads, so the zip carries `Install ArtiMax PDF Editor.bat` for a one-click install. Users download the zip from there.
 - **GitHub Releases** — secondary but wired to the in-app updater (`UpdateCheckService.cs`). Tag `vX.Y.Z`, push tag, `gh release create vX.Y.Z dist/*.exe dist/*.zip --title ... --notes ...`. **Never move a tag once cut** — moving detaches its GitHub Release into Draft. If a release ships broken, cut a fresh patch (`vX.Y.Z+1`). Memory `feedback_release_tags.md`.
 
 ## Architecture in one screen
