@@ -687,7 +687,7 @@ public partial class MainViewModel : ObservableObject
             // Strip native /Text sticky notes from the bytes BEFORE rendering so
             // no small default icons end up in the page bitmaps; attach them to
             // the fresh pages after rebuild.
-            var extractedNotes = ExtractStickyNotesForRematerialization();
+            var extractedNotes = await ExtractStickyNotesForRematerializationAsync();
             await RebuildPagesAsync();
             ApplyRematerializedStickyNotes(extractedNotes);
             SnapshotOverlaySignature();
@@ -719,15 +719,22 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ClearRecent() => _recents.Clear();
 
-    private void RefreshBookmarks()
+    private async Task RefreshBookmarksAsync()
     {
         Bookmarks.Clear();
         if (_doc.Bytes is null) return;
+        var bytes = _doc.Bytes;
+        // Parse the outline tree off the UI thread — PdfSharpCore.PdfReader.Open on
+        // first use does several seconds of static init, which would freeze the
+        // "Working" overlay during the first file open of the session.
+        System.Collections.Generic.List<BookmarkNode>? read = null;
         try
         {
-            foreach (var b in _bookmarks.Read(_doc.Bytes)) Bookmarks.Add(b);
+            read = await Task.Run(() => _bookmarks.Read(bytes));
         }
-        catch { }
+        catch { return; }
+        if (read is null) return;
+        foreach (var b in read) Bookmarks.Add(b);
     }
 
     [RelayCommand]
@@ -779,19 +786,25 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Two-phase round-trip. Phase 1 (before rebuild): extract every native
     /// /Text sticky note from _doc.Bytes and strip them, so the render is clean.
     /// Returns the list of extracted notes for phase 2 to attach after RebuildPagesAsync
-    /// has re-created the PageViewModels.</summary>
-    private System.Collections.Generic.List<Models.PdfAnnotation> ExtractStickyNotesForRematerialization()
+    /// has re-created the PageViewModels.
+    /// Runs on a background thread — PdfSharpCore's first-use static init (font resolver,
+    /// encoding tables) can take several seconds and would freeze the "Working" overlay
+    /// on first file open if invoked on the UI thread.</summary>
+    private Task<System.Collections.Generic.List<Models.PdfAnnotation>> ExtractStickyNotesForRematerializationAsync()
     {
         var empty = new System.Collections.Generic.List<Models.PdfAnnotation>();
-        if (_doc.Bytes is null) return empty;
-        try
+        if (_doc.Bytes is null) return Task.FromResult(empty);
+        return Task.Run(() =>
         {
-            var (cleaned, notes) = _annotate.ExtractAndStripStickyNotes(_doc.Bytes);
-            if (notes.Count == 0) return empty;
-            _doc.ReplaceBytes(cleaned, label: "(extract sticky notes)", markDirty: false, pushUndo: false);
-            return notes;
-        }
-        catch { return empty; }
+            try
+            {
+                var (cleaned, notes) = _annotate.ExtractAndStripStickyNotes(_doc.Bytes!);
+                if (notes.Count == 0) return empty;
+                _doc.ReplaceBytes(cleaned, label: "(extract sticky notes)", markDirty: false, pushUndo: false);
+                return notes;
+            }
+            catch { return empty; }
+        });
     }
 
     /// <summary>Phase 2: attach previously-extracted sticky notes to their pages.
@@ -837,7 +850,7 @@ public partial class MainViewModel : ObservableObject
                 });
             }
         });
-        RefreshBookmarks();
+        await RefreshBookmarksAsync();
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
@@ -908,7 +921,7 @@ public partial class MainViewModel : ObservableObject
             // Post-save round-trip: strip the just-written /Text notes from the bytes
             // BEFORE rendering (so no icons in the bitmaps), then rebuild, then attach
             // them back as editable overlays.
-            var extractedNotes = ExtractStickyNotesForRematerialization();
+            var extractedNotes = await ExtractStickyNotesForRematerializationAsync();
             await RebuildPagesAsync();
             ApplyRematerializedStickyNotes(extractedNotes);
             SnapshotOverlaySignature();
